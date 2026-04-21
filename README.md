@@ -1,11 +1,26 @@
-<div align="center">
+# Speed Alert
 
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
+A hands-free, production-ready driving safety assistant that monitors speed limits automatically.
 
-  <h1>Built with AI Studio</h2>
+## Setup Instructions
 
-  <p>The fastest path from prompt to production with Gemini.</p>
+### Backend (Local)
+1. Ensure Docker, Docker Compose, and .NET 8 SDK are installed.
+2. Run `docker-compose up -d db` to start PostgreSQL.
+3. CD into `backend/SpeedAlert.Api` and run `dotnet run`.
+4. API running at `http://localhost:5000/swagger`.
 
-  <a href="https://aistudio.google.com/apps">Start building</a>
+### Mobile (Local)
+1. Ensure Flutter stable is installed.
+2. Run `cd mobile` and `flutter pub get`.
+3. Set your backend URL in a local environment configuration or directly in the API client.
+4. Run `flutter run`.
 
-</div>
+## Deployment
+See `railway-deploy.md` for exact steps to deploy the API to a production environment.
+
+## Documentation
+- [Architecture](architecture.md)
+- [Hands-Free Guide](hands-free-mode.md)
+- [Testing Guide](testing-guide.md)
+- [Known Limitations](known-limitations.md)
