@@ -1,6 +1,6 @@
 {
-  "name": "",
-  "description": "",
+  "name": "Speed Alert Admin",
+  "description": "Web admin dashboard for the Speed Alert driving assistant.",
   "requestFramePermissions": [],
   "majorCapabilities": []
 }

@@ -12,6 +12,9 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using SpeedAlert.Application.Interfaces;
 using SpeedAlert.Infrastructure.Persistence;
+using SpeedAlert.Domain.Entities;
+using System.Linq;
+using System.Threading.Tasks;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -53,17 +56,40 @@ builder.Services.AddAuthorization();
 
 var app = builder.Build();
 
-// Migrate DB on startup (Railway friendly)
+// Migrate DB and Seed Admin User on startup (Railway friendly)
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     try
     {
+        Log.Information("Applying migrations...");
         db.Database.Migrate();
+
+        // Seed Admin Data
+        var adminEmail = builder.Configuration["Admin:Email"] ?? "admin@speedalert.com";
+        var adminPassword = builder.Configuration["Admin:Password"] ?? "AdminSecure123!";
+
+        if (!db.Users.Any(u => u.Email == adminEmail))
+        {
+            Log.Information($"Seeding default admin user: {adminEmail}");
+            var adminUser = new User
+            {
+                Email = adminEmail,
+                PasswordHash = BCrypt.Net.BCrypt.HashPassword(adminPassword),
+                Role = "Admin", // Crucial for [Authorize(Roles = "Admin")]
+                IsActive = true
+            };
+            
+            adminUser.Settings = new UserSettings { UserId = adminUser.Id };
+            
+            db.Users.Add(adminUser);
+            db.SaveChanges();
+            Log.Information("Admin user seeded successfully.");
+        }
     }
     catch (Exception ex)
     {
-        Log.Error(ex, "Failed to migrate database on startup");
+        Log.Error(ex, "Failed to migrate or seed database on startup");
     }
 }
 
