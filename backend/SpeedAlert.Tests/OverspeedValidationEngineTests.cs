@@ -57,4 +57,32 @@ public class OverspeedValidationEngineTests
         var result = _engine.IsViolationConfirmed(points, 60, 5, 3);
         result.Should().BeTrue();
     }
+
+    [Fact]
+    public void IsViolationConfirmed_ReturnsFalse_WhenPointsAreInvalidated()
+    {
+        var startTime = DateTime.UtcNow;
+        var points = new List<SessionPoint>
+        {
+            new SessionPoint { SpeedKph = 80, IsValid = false, AccuracyMeters = 50, Timestamp = startTime },
+            new SessionPoint { SpeedKph = 82, IsValid = false, AccuracyMeters = 50, Timestamp = startTime.AddSeconds(4) }
+        };
+
+        var result = _engine.IsViolationConfirmed(points, 60, 5, 3);
+        result.Should().BeFalse();
+    }
+    
+    [Fact]
+    public void IsViolationConfirmed_ReturnsFalse_WhenDurationRequirementIsMissed()
+    {
+        var startTime = DateTime.UtcNow;
+        var points = new List<SessionPoint>
+        {
+            new SessionPoint { SpeedKph = 80, IsValid = true, AccuracyMeters = 5, Timestamp = startTime },
+            new SessionPoint { SpeedKph = 82, IsValid = true, AccuracyMeters = 5, Timestamp = startTime.AddSeconds(2) } // Only 2 seconds duration
+        };
+
+        var result = _engine.IsViolationConfirmed(points, 60, 5, 3);
+        result.Should().BeFalse();
+    }
 }

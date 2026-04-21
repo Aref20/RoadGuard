@@ -2,6 +2,10 @@ import 'dart:async';
 import 'dart:ui';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:hive_flutter/hive_flutter.dart';
+import '../api/api_client.dart';
+import '../engine/overspeed_engine.dart';
 
 class BackgroundMonitoringService {
   static Future<void> initialize() async {
@@ -51,6 +55,10 @@ class BackgroundMonitoringService {
       service.stopSelf();
     });
 
+    // Need Hive for auth token if connecting to backend inside background isolate
+    await Hive.initFlutter();
+    await Hive.openBox('settings');
+
     // Initialize Geolocator and bind to OverspeedEngine
     bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) return;
@@ -65,30 +73,58 @@ class BackgroundMonitoringService {
       distanceFilter: 10, // meters
     );
 
+    double currentSpeedLimit = -1.0;
+    String status = "Waiting for data...";
+    DateTime lastCacheTime = DateTime.fromMillisecondsSinceEpoch(0);
+
     StreamSubscription<Position> positionStream = Geolocator.getPositionStream(locationSettings: locationSettings).listen(
       (Position position) async {
-        // Here we would normally query the local cache or backend API for the current speed limit.
-        // For the hands-free offline pipeline, we assume 60kph if unknown, or retrieve from Hive.
-        double currentSpeedLimit = 60.0; // Mock lookup
+        
+        // Rate-limit API calls (fetch limit approx every 1 minute or manually cache locally)
+        if (DateTime.now().difference(lastCacheTime).inSeconds > 60) {
+            try {
+               final apiClient = ApiClient();
+               final result = await apiClient.dio.get('/speed-limit/lookup?lat=${position.latitude}&lng=${position.longitude}');
+               if (result.statusCode == 200) {
+                  currentSpeedLimit = result.data['speedLimitKph']?.toDouble() ?? -1.0;
+                  status = result.data['source'] ?? "Unknown";
+                  lastCacheTime = DateTime.now();
+               }
+            } catch (e) {
+               currentSpeedLimit = -1.0;
+               status = "Offline Fallback";
+            }
+        }
 
-        overspeedEngine.processNewLocation(position, currentSpeedLimit);
+        double speedKph = position.speed * 3.6;
 
-        if (overspeedEngine.isAlerting) {
-          if (service is AndroidServiceInstance) {
+        if (currentSpeedLimit > 0) {
+           overspeedEngine.processNewLocation(position, currentSpeedLimit);
+        }
+
+        if (service is AndroidServiceInstance) {
+          if (overspeedEngine.isAlerting) {
             service.setForegroundNotificationInfo(
               title: "SPEED WARNING",
               content: "Reduce speed immediately! Limit: $currentSpeedLimit",
             );
-          }
-          // Fire haptic/audio alert here using Vibration/AudioPlayers plugin
-        } else {
-          if (service is AndroidServiceInstance) {
+            // Fire haptic/audio alert here using Vibration/AudioPlayers plugin
+          } else {
             service.setForegroundNotificationInfo(
               title: "Active Monitoring",
-              content: "Current Speed: ${(position.speed * 3.6).toInt()} km/h",
+              content: "Current Speed: ${speedKph.toInt()} km/h",
             );
           }
         }
+
+        // Send data to foreground UI
+        service.invoke('update', {
+          "currentSpeed": speedKph,
+          "speedLimit": currentSpeedLimit,
+          "isAlerting": overspeedEngine.isAlerting,
+          "providerStatus": status,
+        });
+
       }
     );
 

@@ -14,6 +14,7 @@ public class AppDbContext : DbContext, IAppDbContext
     public DbSet<SessionPoint> SessionPoints => Set<SessionPoint>();
     public DbSet<AlertEvent> AlertEvents => Set<AlertEvent>();
     public DbSet<RoadLookupCache> RoadLookupCaches => Set<RoadLookupCache>();
+    public DbSet<DeviceStatus> DeviceStatuses => Set<DeviceStatus>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

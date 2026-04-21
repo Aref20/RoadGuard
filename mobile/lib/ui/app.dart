@@ -4,6 +4,7 @@ import 'screens/home_screen.dart';
 import 'screens/monitor_screen.dart';
 import 'screens/login_screen.dart';
 import 'screens/settings_screen.dart';
+import 'screens/history_screen.dart';
 import '../core/engine/overspeed_engine.dart';
 
 class SpeedAlertApp extends StatelessWidget {
@@ -30,6 +31,7 @@ class SpeedAlertApp extends StatelessWidget {
         '/login': (context) => const LoginScreen(),
         '/monitor': (context) => const MonitorScreen(),
         '/settings': (context) => const SettingsScreen(),
+        '/history': (context) => const HistoryScreen(),
       },
     );
   }

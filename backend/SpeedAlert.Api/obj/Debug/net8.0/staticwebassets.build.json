@@ -1,0 +1,11 @@
+{
+  "Version": 1,
+  "Hash": "mvwzV+K51PdpL9BpGoV5yOFMteyMPGrjmxXcMZ8I8wY=",
+  "Source": "SpeedAlert.Api",
+  "BasePath": "_content/SpeedAlert.Api",
+  "Mode": "Default",
+  "ManifestType": "Build",
+  "ReferencedProjectsConfiguration": [],
+  "DiscoveryPatterns": [],
+  "Assets": []
+}

@@ -30,7 +30,10 @@ This project is built for seamless deployment on [Railway.app](https://railway.a
    - `PORT` = `8080` (Railway automatically assigns $PORT, ASP.NET picks it up via configuration we set)
 
 5. **Migrations & Execution**:
-   - The Dockerfile applies `dotnet ef database update` via a startup script, or we hook it into the CI. For Railway, we configure our `Program.cs` to apply pending migrations on startup safely if `ASPNETCORE_ENVIRONMENT` is Production. (Note: In large systems, separate script is better, but for initial Railway deploy, startup migration is included safely).
+   - The application relies on EF Core Migrations tracking the database schema. **Important:** Before deploying to Railway, make sure you generated the migrations locally and committed them using:
+     `dotnet ef migrations add InitialCreate --project SpeedAlert.Infrastructure --startup-project SpeedAlert.Api`
+   - During boot, our `Program.cs` automatically invokes `db.Database.Migrate()` on startup to apply these pending migrations safely to your Railway Postgres Database.
+   - We also automatically seed a default admin user via the `Admin:Email` and `Admin:Password` environment variables.
 
 6. **Verify Build**:
    - Railway will build using the `Dockerfile` in `/backend`.

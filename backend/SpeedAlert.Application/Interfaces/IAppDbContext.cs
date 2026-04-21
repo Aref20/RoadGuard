@@ -13,5 +13,6 @@ public interface IAppDbContext
     DbSet<SessionPoint> SessionPoints { get; }
     DbSet<AlertEvent> AlertEvents { get; }
     DbSet<RoadLookupCache> RoadLookupCaches { get; }
+    DbSet<DeviceStatus> DeviceStatuses { get; }
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }

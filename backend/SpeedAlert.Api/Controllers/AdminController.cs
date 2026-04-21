@@ -28,11 +28,23 @@ public class AdminController : ControllerBase
     [HttpGet("sessions")]
     public async Task<IActionResult> GetSessions()
     {
-        var activeSessions = await _db.Sessions
-            .Where(s => s.Status == "Active")
-            .Select(s => new { s.Id, s.UserId, s.StartedAt, s.WasAutoStarted })
+        var sessions = await _db.Sessions
+            .OrderByDescending(s => s.StartedAt)
+            .Take(100)
+            .Select(s => new { 
+                s.Id, 
+                s.UserId, 
+                s.StartedAt, 
+                s.EndedAt, 
+                s.Status,
+                s.WasAutoStarted,
+                s.SessionStartReason,
+                s.SessionEndReason,
+                s.OverspeedEventCount,
+                s.AlertEventCount
+            })
             .ToListAsync();
-        return Ok(activeSessions);
+        return Ok(sessions);
     }
 
     [HttpGet("health-overview")]
@@ -40,12 +52,23 @@ public class AdminController : ControllerBase
     {
         var totalUsers = await _db.Users.CountAsync();
         var totalSessions = await _db.Sessions.CountAsync();
+        var activeSessions = await _db.Sessions.CountAsync(s => s.Status == "Active");
+        var autoStartedSessions = await _db.Sessions.CountAsync(s => s.WasAutoStarted);
+        
+        var totalViolations = await _db.Sessions.SumAsync(s => s.OverspeedEventCount);
+        var totalAlerts = await _db.Sessions.SumAsync(s => s.AlertEventCount);
 
         return Ok(new
         {
             TotalUsers = totalUsers,
             TotalSessions = totalSessions,
-            ServerTime = System.DateTime.UtcNow
+            ActiveSessions = activeSessions,
+            AutoStartedSessions = autoStartedSessions,
+            TotalViolations = totalViolations,
+            TotalAlerts = totalAlerts,
+            ServerTime = System.DateTime.UtcNow,
+            ApiVersion = "1.0",
+            DatabaseStatus = "Healthy"
         });
     }
 }

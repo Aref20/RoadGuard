@@ -86,6 +86,16 @@ public class AlertEvent
     public double SpeedLimitKph { get; set; }
 }
 
+public class DeviceStatus
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid UserId { get; set; }
+    public string Platform { get; set; } = null!;
+    public bool IsBatteryOptimized { get; set; }
+    public bool BackgroundLocationGranted { get; set; }
+    public DateTime Timestamp { get; set; } = DateTime.UtcNow;
+}
+
 public class RoadLookupCache
 {
     public Guid Id { get; set; } = Guid.NewGuid();

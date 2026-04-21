@@ -13,6 +13,10 @@ import { api, getAuthToken, removeAuthToken } from '@/lib/api';
 type SystemHealth = {
   totalUsers: number;
   totalSessions: number;
+  activeSessions: number;
+  autoStartedSessions: number;
+  totalViolations: number;
+  totalAlerts: number;
   databaseStatus: string;
   serverTime: string;
 };
@@ -60,8 +64,12 @@ export default function AdminDashboard() {
         ]);
         
         setHealth({
-           totalUsers: healthData.totalUsers || healthData.TotalUsers,
-           totalSessions: healthData.totalSessions || healthData.TotalSessions,
+           totalUsers: healthData.totalUsers || healthData.TotalUsers || 0,
+           totalSessions: healthData.totalSessions || healthData.TotalSessions || 0,
+           activeSessions: healthData.activeSessions || healthData.ActiveSessions || 0,
+           autoStartedSessions: healthData.autoStartedSessions || healthData.AutoStartedSessions || 0,
+           totalViolations: healthData.totalViolations || healthData.TotalViolations || 0,
+           totalAlerts: healthData.totalAlerts || healthData.TotalAlerts || 0,
            databaseStatus: healthData.databaseStatus || healthData.DatabaseStatus,
            serverTime: healthData.serverTime || healthData.ServerTime
         });
@@ -184,9 +192,21 @@ export default function AdminDashboard() {
             />
             <MetricCard 
               title="Active Sessions" 
-              value={health?.totalSessions?.toString() || '0'} 
+              value={health?.activeSessions?.toString() || '0'} 
               icon={<Activity size={22} className="text-emerald-500" />} 
-              trend={isBackendConnected ? "Tracking..." : "Offline"}
+              trend={isBackendConnected ? `${health?.totalSessions || 0} Total Sessions` : "Offline"}
+            />
+            <MetricCard 
+              title="Total Violations" 
+              value={health?.totalViolations?.toLocaleString() || '0'} 
+              icon={<ShieldAlert size={22} className="text-orange-500" />} 
+              trend={isBackendConnected ? "Recorded Events" : "Offline"}
+            />
+            <MetricCard 
+              title="Total Alerts Triggered" 
+              value={health?.totalAlerts?.toLocaleString() || '0'} 
+              icon={<Bell size={22} className="text-red-500" />} 
+              trend={isBackendConnected ? "Audio/Haptic Warns" : "Offline"}
             />
           </div>
 

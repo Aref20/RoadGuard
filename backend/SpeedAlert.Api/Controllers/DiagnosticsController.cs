@@ -1,12 +1,23 @@
 using Microsoft.AspNetCore.Mvc;
+using SpeedAlert.Application.Interfaces;
+using SpeedAlert.Domain.Entities;
+using System.Security.Claims;
+using Microsoft.AspNetCore.Authorization;
+using System.Threading.Tasks;
 
 namespace SpeedAlert.Api.Controllers;
 
 [ApiController]
 [Route("api/monitoring")]
+[Authorize]
 public class DiagnosticsController : ControllerBase
 {
+    private readonly IAppDbContext _db;
+
+    public DiagnosticsController(IAppDbContext db) => _db = db;
+
     [HttpGet("status")]
+    [AllowAnonymous]
     public IActionResult GetSystemStatus()
     {
         return Ok(new {
@@ -17,9 +28,22 @@ public class DiagnosticsController : ControllerBase
     }
 
     [HttpPost("device-status")]
-    public IActionResult UploadDeviceStatus([FromBody] DeviceStatusDto status)
+    public async Task<IActionResult> UploadDeviceStatus([FromBody] DeviceStatusDto status)
     {
-        // This accepts telemetry from mobile explaining if it's restricted by Battery Savers
+        var userIdString = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!System.Guid.TryParse(userIdString, out var userId)) return Unauthorized();
+
+        var deviceStatus = new DeviceStatus
+        {
+            UserId = userId,
+            Platform = status.Platform,
+            IsBatteryOptimized = status.IsBatteryOptimized,
+            BackgroundLocationGranted = status.BackgroundLocationGranted
+        };
+
+        _db.DeviceStatuses.Add(deviceStatus);
+        await _db.SaveChangesAsync();
+
         return Ok();
     }
 }
