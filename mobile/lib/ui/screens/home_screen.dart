@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:flutter_background_service/flutter_background_service.dart';
 import '../../core/api/api_client.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -12,21 +13,48 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   bool _isLocationGranted = false;
   bool _isServiceEnabled = false;
+  bool _isMonitorRunning = false;
+  bool _isDriving = false;
 
   @override
   void initState() {
     super.initState();
     _checkStatus();
+    
+    // Listen to background service updates
+    FlutterBackgroundService().on('update').listen((event) {
+      if (!mounted) return;
+      setState(() {
+        _isMonitorRunning = true;
+        _isDriving = event?['isDriving'] == true;
+      });
+    });
   }
 
   Future<void> _checkStatus() async {
     bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
     LocationPermission permission = await Geolocator.checkPermission();
+    bool running = await FlutterBackgroundService().isRunning();
     
-    setState(() {
-      _isServiceEnabled = serviceEnabled;
-      _isLocationGranted = permission == LocationPermission.always || permission == LocationPermission.whileInUse;
-    });
+    if (mounted) {
+      setState(() {
+        _isServiceEnabled = serviceEnabled;
+        _isLocationGranted = permission == LocationPermission.always || permission == LocationPermission.whileInUse;
+        _isMonitorRunning = running;
+      });
+    }
+  }
+
+  Future<void> _toggleService() async {
+    final service = FlutterBackgroundService();
+    bool running = await service.isRunning();
+    if (running) {
+      service.invoke('stopService');
+      setState(() { _isMonitorRunning = false; _isDriving = false; });
+    } else {
+      await service.startService();
+      setState(() { _isMonitorRunning = true; });
+    }
   }
 
   @override
@@ -57,14 +85,26 @@ class _HomeScreenState extends State<HomeScreen> {
             _buildStatusCard(context),
             const SizedBox(height: 24),
             ElevatedButton.icon(
-              onPressed: () => Navigator.pushNamed(context, '/monitor'),
-              icon: const Icon(Icons.speed),
-              label: const Text('Manual Override: Start Monitor'),
+              onPressed: () {
+                if (_isMonitorRunning) {
+                   Navigator.pushNamed(context, '/monitor');
+                } else {
+                   _toggleService();
+                }
+              },
+              icon: Icon(_isMonitorRunning ? Icons.speed : Icons.play_arrow),
+              label: Text(_isMonitorRunning ? 'View Live Monitor' : 'Manual Override: Start Monitor'),
               style: ElevatedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 16),
+                backgroundColor: _isMonitorRunning ? Colors.blue : null,
               ),
             ),
-            const SizedBox(height: 24),
+            if (_isMonitorRunning)
+              TextButton(
+                onPressed: _toggleService,
+                child: const Text('Stop Background Monitor', style: TextStyle(color: Colors.red)),
+              ),
+            const SizedBox(height: 12),
             const Text('Recent Sessions', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             Expanded(
               child: FutureBuilder(
@@ -101,23 +141,50 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildStatusCard(BuildContext context) {
     bool isReady = _isLocationGranted && _isServiceEnabled;
+    
+    IconData icon;
+    Color color;
+    String title;
+    String subtitle;
+    
+    if (!isReady) {
+       icon = Icons.error;
+       color = Colors.red;
+       title = 'Setup Required';
+       subtitle = 'Please enable location services and grant permissions.';
+    } else if (_isDriving) {
+       icon = Icons.directions_car;
+       color = Colors.blue;
+       title = 'Active Monitoring';
+       subtitle = 'Vehicle motion detected. Safe travels!';
+    } else if (_isMonitorRunning) {
+       icon = Icons.check_circle;
+       color = Colors.green;
+       title = 'Passive Readiness Active';
+       subtitle = 'Waiting for vehicle motion...';
+    } else {
+       icon = Icons.pause_circle;
+       color = Colors.orange;
+       title = 'Monitoring Paused';
+       subtitle = 'Background service is stopped.';
+    }
 
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           children: [
-            Icon(isReady ? Icons.check_circle : Icons.error, color: isReady ? Colors.green : Colors.red, size: 48),
+            Icon(icon, color: color, size: 48),
             const SizedBox(height: 8),
-            Text(isReady ? 'Passive Readiness Active' : 'Setup Required', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-            Text(isReady ? 'Waiting for vehicle motion...' : 'Please enable location services and grant permissions.'),
+            Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            Text(subtitle, textAlign: TextAlign.center),
             const SizedBox(height: 16),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
                 _buildDiagnosticIcon(Icons.location_on, _isLocationGranted ? Colors.green : Colors.red),
                 _buildDiagnosticIcon(Icons.gps_fixed, _isServiceEnabled ? Colors.green : Colors.red),
-                _buildDiagnosticIcon(Icons.battery_alert, Colors.orange), // E.g. battery optimization not disabled
+                _buildDiagnosticIcon(Icons.monitor_heart, _isMonitorRunning ? Colors.green : Colors.grey),
               ],
             )
           ],

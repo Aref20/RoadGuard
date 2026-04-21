@@ -13,17 +13,35 @@ namespace SpeedAlert.Api.Controllers;
 public class DiagnosticsController : ControllerBase
 {
     private readonly IAppDbContext _db;
+    private readonly ISpeedLimitProvider _speedLimitProvider;
 
-    public DiagnosticsController(IAppDbContext db) => _db = db;
+    public DiagnosticsController(IAppDbContext db, ISpeedLimitProvider speedLimitProvider)
+    {
+        _db = db;
+        _speedLimitProvider = speedLimitProvider;
+    }
 
     [HttpGet("status")]
     [AllowAnonymous]
-    public IActionResult GetSystemStatus()
+    public async Task<IActionResult> GetSystemStatus()
     {
+        bool dbHealthy = false;
+        try {
+            dbHealthy = await ((Microsoft.EntityFrameworkCore.DbContext)_db).Database.CanConnectAsync();
+        } catch { }
+
+        // Test Provider with a dummy coordinate
+        bool providerHealthy = false;
+        try {
+            var result = await _speedLimitProvider.GetSpeedLimitAsync(0, 0);
+            providerHealthy = true; // If it doesn't throw, we assume it's capable
+        } catch { }
+
         return Ok(new {
             ApiVersion = "1.0",
-            PlatformHealth = "Healthy",
-            SpeedLimitProviderStatus = "Active" // This would ping the actual provider logically
+            PlatformHealth = dbHealthy && providerHealthy ? "Healthy" : "Degraded",
+            DatabaseStatus = dbHealthy ? "Connected" : "Disconnected",
+            SpeedLimitProviderStatus = providerHealthy ? "Active" : "Offline"
         });
     }
 

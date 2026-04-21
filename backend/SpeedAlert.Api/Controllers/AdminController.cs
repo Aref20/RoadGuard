@@ -58,6 +58,11 @@ public class AdminController : ControllerBase
         var totalViolations = await _db.Sessions.SumAsync(s => s.OverspeedEventCount);
         var totalAlerts = await _db.Sessions.SumAsync(s => s.AlertEventCount);
 
+        bool dbHealthy = false;
+        try {
+            dbHealthy = await ((Microsoft.EntityFrameworkCore.DbContext)_db).Database.CanConnectAsync();
+        } catch { }
+
         return Ok(new
         {
             TotalUsers = totalUsers,
@@ -68,7 +73,7 @@ public class AdminController : ControllerBase
             TotalAlerts = totalAlerts,
             ServerTime = System.DateTime.UtcNow,
             ApiVersion = "1.0",
-            DatabaseStatus = "Healthy"
+            DatabaseStatus = dbHealthy ? "Healthy" : "Disconnected"
         });
     }
 }

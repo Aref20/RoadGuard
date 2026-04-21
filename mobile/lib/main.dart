@@ -3,6 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'ui/app.dart';
 import 'core/services/background_service.dart';
+import 'core/engine/driving_detection_engine.dart';
+
+final drivingDetectionEngine = DrivingDetectionEngine();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -14,6 +17,9 @@ void main() async {
 
   // Init hands-free background tracker
   await BackgroundMonitoringService.initialize();
+  
+  // Start passive activity recognition
+  await drivingDetectionEngine.startListening();
 
   runApp(
     const ProviderScope(

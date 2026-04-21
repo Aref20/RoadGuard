@@ -108,10 +108,6 @@ export default function AdminDashboard() {
         
         <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
           <NavItem icon={<LayoutDashboard size={20}/>} label="Dashboard" active />
-          <NavItem icon={<Users size={20}/>} label="Users & Drivers" />
-          <NavItem icon={<Car size={20}/>} label="Live Map" />
-          <NavItem icon={<History size={20}/>} label="Violation Log" />
-          <NavItem icon={<Settings size={20}/>} label="System Settings" />
         </nav>
         
         <div className="p-4 border-t border-slate-800">
