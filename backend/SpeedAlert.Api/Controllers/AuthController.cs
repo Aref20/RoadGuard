@@ -30,28 +30,8 @@ public class AuthController : ControllerBase
     [HttpPost("register")]
     public async Task<IActionResult> Register([FromBody] AuthDto request)
     {
-        if (!ModelState.IsValid)
-            return BadRequest(ModelState);
-
-        var normalizedEmail = request.Email.Trim().ToLowerInvariant();
-
-        if (await _db.Users.AnyAsync(u => u.Email == normalizedEmail))
-            return BadRequest(new { code = "AUTH_EMAIL_IN_USE", message = "Email already in use" });
-            
-        var user = new User
-        {
-            Email = normalizedEmail,
-            PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.Password),
-            Role = "User",
-            IsActive = true
-        };
-        
-        user.Settings = new UserSettings { UserId = user.Id };
-        
-        _db.Users.Add(user);
-        await _db.SaveChangesAsync();
-        
-        return Ok(new { token = GenerateJwt(user) });
+        // Self-registration is strictly disabled. Users must be created by an Admin.
+        return BadRequest(new { code = "AUTH_SELF_REGISTRATION_DISABLED", message = "Self-registration is disabled. Please contact an administrator." });
     }
 
     [HttpPost("login")]
@@ -65,6 +45,9 @@ public class AuthController : ControllerBase
         var user = await _db.Users.FirstOrDefaultAsync(u => u.Email == normalizedEmail);
         if (user == null || !BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
             return Unauthorized(new { code = "AUTH_INVALID_CREDENTIALS", message = "Invalid credentials" });
+            
+        if (!user.IsActive)
+            return Unauthorized(new { code = "AUTH_ACCOUNT_DISABLED", message = "Account is disabled" });
             
         return Ok(new { token = GenerateJwt(user) });
     }

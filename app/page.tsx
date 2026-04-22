@@ -7,7 +7,7 @@ import {
   Car, Activity, ShieldAlert, Users, Database, 
   Server, MapPin, AlertTriangle, Settings, Bell, 
   Search, LayoutDashboard, History, LogOut, CheckCircle2,
-  Save, Globe
+  Save, Globe, UserPlus, Key, Power, PowerOff
 } from 'lucide-react';
 import { api, getAuthToken, removeAuthToken } from '@/lib/api';
 import * as signalR from '@microsoft/signalr';
@@ -29,6 +29,7 @@ type User = {
   email: string;
   isActive: boolean;
   createdAt: string;
+  role?: string;
 };
 
 type Session = {
@@ -50,7 +51,7 @@ type ProviderConfig = {
 export default function AdminDashboard() {
   const router = useRouter();
   const { t, isRtl, language, setLanguage } = useLanguage();
-  const [currentView, setCurrentView] = useState<'dashboard' | 'settings'>('dashboard');
+  const [currentView, setCurrentView] = useState<'dashboard' | 'settings' | 'users'>('dashboard');
   const [health, setHealth] = useState<SystemHealth | null>(null);
   const [users, setUsers] = useState<User[]>([]);
   const [sessions, setSessions] = useState<Session[]>([]);
@@ -58,6 +59,15 @@ export default function AdminDashboard() {
   const [isBackendConnected, setIsBackendConnected] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(true);
   const [savingSettings, setSavingSettings] = useState(false);
+  
+  // User Management State
+  const [isAddUserOpen, setIsAddUserOpen] = useState(false);
+  const [isResetPasswordOpen, setIsResetPasswordOpen] = useState(false);
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  const [userEmail, setUserEmail] = useState('');
+  const [userPassword, setUserPassword] = useState('');
+  const [userConfirmPassword, setUserConfirmPassword] = useState('');
+  
   const connectionRef = useRef<signalR.HubConnection | null>(null);
 
   const performLogout = () => {
@@ -193,6 +203,63 @@ export default function AdminDashboard() {
     });
   };
 
+  const handleCreateUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (userPassword !== userConfirmPassword) {
+      alert(t('Passwords do not match.'));
+      return;
+    }
+    if (userPassword.length < 8) {
+      alert(t('Password must be at least 8 characters.'));
+      return;
+    }
+
+    try {
+      const newUser = await api.createUser({ email: userEmail, password: userPassword });
+      setUsers(prev => [...prev, newUser]);
+      setIsAddUserOpen(false);
+      setUserEmail('');
+      setUserPassword('');
+      setUserConfirmPassword('');
+      alert(t('User successfully created!'));
+    } catch (err: any) {
+      alert(t(err.message));
+    }
+  };
+
+  const handleToggleUserStatus = async (id: string, currentStatus: boolean) => {
+    try {
+      await api.updateUserStatus(id, !currentStatus);
+      setUsers(prev => prev.map(u => u.id === id ? { ...u, isActive: !currentStatus } : u));
+    } catch (err: any) {
+      alert(t(err.message));
+    }
+  };
+
+  const handleResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (userPassword !== userConfirmPassword) {
+      alert(t('Passwords do not match.'));
+      return;
+    }
+    if (userPassword.length < 8) {
+      alert(t('Password must be at least 8 characters.'));
+      return;
+    }
+    if (!selectedUserId) return;
+
+    try {
+      await api.resetUserPassword(selectedUserId, userPassword);
+      setIsResetPasswordOpen(false);
+      setSelectedUserId(null);
+      setUserPassword('');
+      setUserConfirmPassword('');
+      alert(t('Password reset successfully!'));
+    } catch (err: any) {
+      alert(t(err.message));
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex h-screen items-center justify-center bg-slate-950">
@@ -217,6 +284,13 @@ export default function AdminDashboard() {
             label={t('Dashboard')} 
             active={currentView === 'dashboard'} 
             onClick={() => setCurrentView('dashboard')} 
+            isRtl={isRtl}
+          />
+          <NavItem 
+            icon={<Users size={20}/>} 
+            label={t('Users Management')} 
+            active={currentView === 'users'} 
+            onClick={() => setCurrentView('users')}
             isRtl={isRtl}
           />
           <NavItem 
@@ -438,7 +512,7 @@ export default function AdminDashboard() {
 
               </div>
             </>
-          ) : (
+          ) : currentView === 'settings' ? (
             <div className="max-w-4xl mx-auto mt-4">
               <div className="flex items-center justify-between mb-8">
                 <div>
@@ -537,9 +611,224 @@ export default function AdminDashboard() {
               </div>
 
             </div>
-          )}
+          ) : currentView === 'users' ? (
+            <div className="max-w-6xl mx-auto mt-4">
+              <div className="flex items-center justify-between mb-8">
+                <div>
+                  <h1 className="text-3xl font-bold tracking-tight text-white mb-1">{t('Users Management')}</h1>
+                  <p className="text-slate-400 text-sm">Create, update, and manage mobile and admin users.</p>
+                </div>
+                <button
+                  onClick={() => setIsAddUserOpen(true)}
+                  className="flex items-center px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-sm font-medium transition-colors"
+                >
+                  <UserPlus size={16} className={`${isRtl ? 'ml-2' : 'mr-2'}`} />
+                  {t('Create User')}
+                </button>
+              </div>
+
+              <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden flex flex-col">
+                <div className="overflow-x-auto min-h-[400px]">
+                  <table className={`w-full text-${isRtl ? 'right' : 'left'} text-sm whitespace-nowrap`}>
+                    <thead>
+                      <tr className="text-slate-500 bg-slate-950/30">
+                        <th className="px-6 py-3 font-medium">{t('Email')}</th>
+                        <th className="px-6 py-3 font-medium text-center">{t('Role')}</th>
+                        <th className="px-6 py-3 font-medium text-center">{t('Active')}</th>
+                        <th className="px-6 py-3 font-medium">{t('Registered')}</th>
+                        <th className="px-6 py-3 font-medium text-center">{t('Actions')}</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800/50">
+                      {users.length === 0 && (
+                        <tr>
+                          <td colSpan={5} className="px-6 py-8 text-center text-slate-500">
+                            {isBackendConnected ? t("No users registered.") : t("Connect to backend to view users.")}
+                          </td>
+                        </tr>
+                      )}
+                      {users.map((u, idx) => (
+                        <motion.tr 
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ delay: idx * 0.05 }}
+                          key={u.id} 
+                          className="hover:bg-slate-800/50 transition-colors"
+                        >
+                          <td className="px-6 py-4 text-slate-300 font-medium">{u.email}</td>
+                          <td className="px-6 py-4 text-center">
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-bold ${
+                              (u as any).role === 'Admin' ? 'bg-purple-500/10 text-purple-400' : 'bg-blue-500/10 text-blue-400'
+                            }`}>
+                              {(u as any).role || 'User'}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 text-center">
+                            <button 
+                              onClick={() => handleToggleUserStatus(u.id, u.isActive)}
+                              // Prevent locking out all admins randomly, though real app checks role in backend
+                              className={`inline-flex items-center justify-center p-1.5 rounded-full transition-colors ${
+                                u.isActive ? 'bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20' : 'bg-slate-800 text-slate-500 hover:bg-slate-700 hover:text-slate-300'
+                              }`}
+                              title={u.isActive ? 'Deactivate' : 'Activate'}
+                            >
+                              <Power size={14} />
+                            </button>
+                          </td>
+                          <td className="px-6 py-4 text-slate-400" dir="ltr">
+                            {new Date(u.createdAt).toLocaleDateString(language === 'ar' ? 'ar-EG' : 'en-US')}
+                          </td>
+                          <td className="px-6 py-4 text-center flex items-center justify-center space-x-2">
+                             <button
+                               onClick={() => {
+                                 setSelectedUserId(u.id);
+                                 setIsResetPasswordOpen(true);
+                               }}
+                               className={`px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-xs transition-colors flex items-center ${isRtl ? 'ml-2' : ''}`}
+                             >
+                                <Key size={12} className={isRtl ? 'ml-1.5' : 'mr-1.5'} />
+                                {t('Reset Password')}
+                             </button>
+                          </td>
+                        </motion.tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          ) : null}
         </div>
       </main>
+
+      {/* Create User Modal */}
+      {isAddUserOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className={`bg-slate-900 border border-slate-800 rounded-xl p-6 w-full max-w-md shadow-2xl text-${isRtl ? 'right' : 'left'}`}
+            dir={isRtl ? 'rtl' : 'ltr'}
+          >
+            <h2 className="text-xl font-bold text-slate-100 mb-4">{t('Create User')}</h2>
+            <form onSubmit={handleCreateUser} className="space-y-4">
+               <div>
+                  <label className="block text-xs font-medium text-slate-400 mb-1">{t('Email')}</label>
+                  <input
+                    type="email"
+                    value={userEmail}
+                    onChange={(e) => setUserEmail(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2.5 text-slate-200 outline-none focus:border-red-500/50"
+                    required
+                    dir="ltr"
+                  />
+               </div>
+               <div>
+                  <label className="block text-xs font-medium text-slate-400 mb-1">{t('Password')}</label>
+                  <input
+                    type="password"
+                    value={userPassword}
+                    onChange={(e) => setUserPassword(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2.5 text-slate-200 outline-none focus:border-red-500/50"
+                    required
+                    dir="ltr"
+                  />
+               </div>
+               <div>
+                  <label className="block text-xs font-medium text-slate-400 mb-1">{t('Confirm Password')}</label>
+                  <input
+                    type="password"
+                    value={userConfirmPassword}
+                    onChange={(e) => setUserConfirmPassword(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2.5 text-slate-200 outline-none focus:border-red-500/50"
+                    required
+                    dir="ltr"
+                  />
+               </div>
+               
+               <div className="flex justify-end space-x-3 mt-6 pt-4 border-t border-slate-800">
+                  <button 
+                    type="button"
+                    onClick={() => {
+                        setIsAddUserOpen(false);
+                        setUserEmail('');
+                        setUserPassword('');
+                        setUserConfirmPassword('');
+                    }}
+                    className={`px-4 py-2 text-sm font-medium text-slate-400 hover:text-slate-200 ${isRtl ? 'ml-3' : ''}`}
+                  >
+                    {t('Cancel')}
+                  </button>
+                  <button 
+                    type="submit"
+                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-sm font-medium"
+                  >
+                    {t('Save')}
+                  </button>
+               </div>
+            </form>
+          </motion.div>
+        </div>
+      )}
+
+      {/* Reset Password Modal */}
+      {isResetPasswordOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className={`bg-slate-900 border border-slate-800 rounded-xl p-6 w-full max-w-md shadow-2xl text-${isRtl ? 'right' : 'left'}`}
+            dir={isRtl ? 'rtl' : 'ltr'}
+          >
+            <h2 className="text-xl font-bold text-slate-100 mb-4">{t('Reset Password')}</h2>
+            <form onSubmit={handleResetPassword} className="space-y-4">
+               <div>
+                  <label className="block text-xs font-medium text-slate-400 mb-1">{t('Password')}</label>
+                  <input
+                    type="password"
+                    value={userPassword}
+                    onChange={(e) => setUserPassword(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2.5 text-slate-200 outline-none focus:border-red-500/50"
+                    required
+                    dir="ltr"
+                  />
+               </div>
+               <div>
+                  <label className="block text-xs font-medium text-slate-400 mb-1">{t('Confirm Password')}</label>
+                  <input
+                    type="password"
+                    value={userConfirmPassword}
+                    onChange={(e) => setUserConfirmPassword(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2.5 text-slate-200 outline-none focus:border-red-500/50"
+                    required
+                    dir="ltr"
+                  />
+               </div>
+               
+               <div className="flex justify-end space-x-3 mt-6 pt-4 border-t border-slate-800">
+                  <button 
+                    type="button"
+                    onClick={() => {
+                        setIsResetPasswordOpen(false);
+                        setSelectedUserId(null);
+                        setUserPassword('');
+                        setUserConfirmPassword('');
+                    }}
+                    className={`px-4 py-2 text-sm font-medium text-slate-400 hover:text-slate-200 ${isRtl ? 'ml-3' : ''}`}
+                  >
+                    {t('Cancel')}
+                  </button>
+                  <button 
+                    type="submit"
+                    className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white rounded-lg text-sm font-medium"
+                  >
+                    {t('Save')}
+                  </button>
+               </div>
+            </form>
+          </motion.div>
+        </div>
+      )}
     </div>
   );
 }

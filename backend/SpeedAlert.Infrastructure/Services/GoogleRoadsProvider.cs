@@ -1,115 +1,72 @@
-using System;
-using System.Globalization;
-using System.Net.Http;
-using System.Text.Json;
-using System.Threading;
-using System.Threading.Tasks;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using SpeedAlert.Application.Interfaces;
 using SpeedAlert.Application.Models;
-using SpeedAlert.Infrastructure.Options;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
+using System.Net.Http;
+using System.Text.Json;
+using System.Threading.Tasks;
+using System;
 
 namespace SpeedAlert.Infrastructure.Services;
 
-public sealed class GoogleRoadsProvider : ISpeedLimitProvider
+public class GoogleRoadsProvider : ISpeedLimitProvider
 {
-    private readonly IHttpClientFactory _httpClientFactory;
-    private readonly IConfiguration _configuration;
-    private readonly IOptionsMonitor<SpeedProvidersOptions> _optionsMonitor;
+    private readonly HttpClient _http;
+    private readonly IConfiguration _config;
     private readonly ILogger<GoogleRoadsProvider> _logger;
-
-    public GoogleRoadsProvider(
-        IHttpClientFactory httpClientFactory,
-        IConfiguration configuration,
-        IOptionsMonitor<SpeedProvidersOptions> optionsMonitor,
-        ILogger<GoogleRoadsProvider> logger)
+    
+    public GoogleRoadsProvider(HttpClient http, IConfiguration config, ILogger<GoogleRoadsProvider> logger)
     {
-        _httpClientFactory = httpClientFactory;
-        _configuration = configuration;
-        _optionsMonitor = optionsMonitor;
+        _http = http;
+        _config = config;
         _logger = logger;
     }
 
-    public string ProviderKey => SpeedProviderKeys.Google;
-
-    public string DisplayName => "Google Roads";
-
-    public bool IsConfigured =>
-        !string.IsNullOrWhiteSpace(
-            SpeedProviderConfiguration.Resolve(ProviderKey, _optionsMonitor.CurrentValue, _configuration).ApiKey);
-
-    public async Task<SpeedLimitResult> GetSpeedLimitAsync(
-        double latitude,
-        double longitude,
-        CancellationToken cancellationToken = default)
+    public async Task<SpeedLimitResult> GetSpeedLimitAsync(double latitude, double longitude)
     {
-        var settings = SpeedProviderConfiguration.Resolve(ProviderKey, _optionsMonitor.CurrentValue, _configuration);
-        if (string.IsNullOrWhiteSpace(settings.ApiKey))
+        var apiKey = _config["SpeedProvider:ApiKey"];
+        if (string.IsNullOrEmpty(apiKey))
         {
-            return SpeedLimitResult.ProviderUnavailable(DisplayName, "Google Roads API key is not configured.");
+            _logger.LogWarning("SpeedProvider:ApiKey is missing in configuration. Using OfflineFallback (-1).");
+            return new SpeedLimitResult { SpeedLimitKph = -1, Source = "OfflineFallback", Confidence = 0.5 };
         }
-
-        var client = _httpClientFactory.CreateClient();
-        var coordinate = string.Create(
-            CultureInfo.InvariantCulture,
-            $"{latitude},{longitude}");
-        var url =
-            $"{settings.BaseUrl?.TrimEnd('/')}/speedLimits?path={Uri.EscapeDataString(coordinate)}&units=KPH&key={Uri.EscapeDataString(settings.ApiKey)}";
-
-        try
+        
+        try 
         {
-            using var response = await client.GetAsync(url, cancellationToken);
-            if (!response.IsSuccessStatusCode)
+            var baseUrl = _config["SpeedProvider:BaseUrl"] ?? "https://roads.googleapis.com/v1/";
+            var url = $"{baseUrl}speedLimits?path={latitude},{longitude}&key={apiKey}";
+            
+            var response = await _http.GetAsync(url);
+            if (!response.IsSuccessStatusCode) 
             {
-                var message = $"Google Roads returned {(int)response.StatusCode}.";
-                _logger.LogWarning(
-                    "Google Roads speed limit lookup failed with status code {StatusCode}.",
-                    response.StatusCode);
-                return SpeedLimitResult.Error(DisplayName, message);
+                _logger.LogWarning("SpeedProvider API returned non-success status code {StatusCode}. Using ApiErrorFallback (-1).", response.StatusCode);
+                return new SpeedLimitResult { SpeedLimitKph = -1, Source = "ApiErrorFallback", Confidence = 0.3 };
             }
 
-            await using var responseStream = await response.Content.ReadAsStreamAsync(cancellationToken);
-            using var document = await JsonDocument.ParseAsync(responseStream, cancellationToken: cancellationToken);
+            var content = await response.Content.ReadAsStringAsync();
+            using var doc = JsonDocument.Parse(content);
+            var root = doc.RootElement;
 
-            if (!document.RootElement.TryGetProperty("speedLimits", out var speedLimits) ||
-                speedLimits.GetArrayLength() == 0)
+            if (root.TryGetProperty("speedLimits", out var limits) && limits.GetArrayLength() > 0)
             {
-                return SpeedLimitResult.NotFound(DisplayName, "Google Roads did not return a posted speed limit.");
+                var firstLimit = limits[0];
+                double speedLimit = firstLimit.GetProperty("speedLimit").GetDouble();
+                string placeId = firstLimit.GetProperty("placeId").GetString() ?? "Unknown";
+
+                return new SpeedLimitResult 
+                { 
+                    SpeedLimitKph = speedLimit, 
+                    RoadName = placeId, 
+                    Source = "GoogleRoads", 
+                    Confidence = 0.95 
+                };
             }
-
-            var firstLimit = speedLimits[0];
-            if (!firstLimit.TryGetProperty("speedLimit", out var speedLimitProperty))
-            {
-                return SpeedLimitResult.NotFound(DisplayName, "Google Roads response did not contain a speed limit value.");
-            }
-
-            var speedLimitKph = speedLimitProperty.GetDouble();
-            var placeId = firstLimit.TryGetProperty("placeId", out var placeIdProperty)
-                ? placeIdProperty.GetString()
-                : null;
-
-            return new SpeedLimitResult
-            {
-                SpeedLimitKph = speedLimitKph,
-                RoadName = null,
-                SegmentIdentifier = placeId,
-                ProviderUsed = ProviderKey,
-                Source = DisplayName,
-                Confidence = 0.95,
-                Status = SpeedLimitLookupStatus.Success,
-                Message = "Posted speed limit returned by Google Roads."
-            };
-        }
-        catch (OperationCanceledException)
-        {
-            throw;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Google Roads lookup threw an exception.");
-            return SpeedLimitResult.Error(DisplayName, "Google Roads lookup failed unexpectedly.");
+            _logger.LogError(ex, "SpeedProvider API threw an exception during limit lookup. Using Unknown (-1).");
         }
+
+        return new SpeedLimitResult { SpeedLimitKph = -1, Source = "Unknown", Confidence = 0.0 };
     }
 }

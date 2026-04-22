@@ -99,36 +99,18 @@ public class DeviceStatus
 public class RoadLookupCache
 {
     public Guid Id { get; set; } = Guid.NewGuid();
-    public string CacheKey { get; set; } = null!;
-    public string StrategyKey { get; set; } = null!;
+    public string CacheKey { get; set; } = null!; // e.g. "lat,lng" rounded grid, or segment id
     public string RoadName { get; set; } = "Unknown";
     public double SpeedLimitKph { get; set; }
-    public string ProviderKey { get; set; } = null!;
-    public string Source { get; set; } = "Unknown";
-    public string? SegmentIdentifier { get; set; }
-    public double Confidence { get; set; }
     public DateTime RetrievedAt { get; set; } = DateTime.UtcNow;
     public DateTime ExpiresAt { get; set; }
 }
 
 public class ProviderConfig
 {
-    public string ProviderKey { get; set; } = null!;
+    public string ProviderKey { get; set; } = null!; // e.g. "Google", "Here", "TomTom"
     public bool IsEnabled { get; set; } = true;
     public int PriorityOrder { get; set; } = 0;
     public bool IsSelected { get; set; } = false;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
-    public string? UpdatedBy { get; set; }
-    public DateTime? LastSuccessfulLookupAt { get; set; }
-    public DateTime? LastFailureAt { get; set; }
-    public string? LastFailureReason { get; set; }
-    public string LastHealthStatus { get; set; } = "Unknown";
-}
-
-public class ProviderRuntimeSettings
-{
-    public int Id { get; set; } = 1;
-    public bool FallbackEnabled { get; set; } = true;
-    public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
-    public string? UpdatedBy { get; set; }
 }

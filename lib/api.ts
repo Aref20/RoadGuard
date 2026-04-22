@@ -72,5 +72,38 @@ export const api = {
     });
     if (!res.ok) throw new Error('Failed to update provider settings');
     return res.json();
+  },
+  createUser: async (payload: any) => {
+    const res = await fetchWithAuth('/admin/users', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) {
+        const d = await res.json().catch(()=>({}));
+        throw new Error(d.message || d.code || 'Failed to create user');
+    }
+    return res.json();
+  },
+  updateUserStatus: async (id: string, isActive: boolean) => {
+    const res = await fetchWithAuth(`/admin/users/${id}/status`, {
+      method: 'PUT',
+      body: JSON.stringify({ isActive })
+    });
+    if (!res.ok) {
+        const d = await res.json().catch(()=>({}));
+        throw new Error(d.message || d.code || 'Failed to update user status');
+    }
+    return res.json();
+  },
+  resetUserPassword: async (id: string, password: string) => {
+    const res = await fetchWithAuth(`/admin/users/${id}/reset-password`, {
+      method: 'PUT',
+      body: JSON.stringify({ password })
+    });
+    if (!res.ok) {
+        const d = await res.json().catch(()=>({}));
+        throw new Error(d.message || d.code || 'Failed to reset password');
+    }
+    return res.json();
   }
 };

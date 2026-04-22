@@ -20,9 +20,65 @@ public class AdminController : ControllerBase
     public async Task<IActionResult> GetUsers()
     {
         var users = await _db.Users
-            .Select(u => new { u.Id, u.Email, u.IsActive, u.CreatedAt })
+            .Select(u => new { u.Id, u.Email, u.IsActive, u.CreatedAt, u.Role })
             .ToListAsync();
         return Ok(users);
+    }
+
+    [HttpPost("users")]
+    public async Task<IActionResult> CreateUser([FromBody] CreateUserAdminDto request)
+    {
+        if (!ModelState.IsValid) return BadRequest(ModelState);
+
+        var normalizedEmail = request.Email.Trim().ToLowerInvariant();
+
+        if (await _db.Users.AnyAsync(u => u.Email == normalizedEmail))
+            return BadRequest(new { code = "AUTH_EMAIL_IN_USE", message = "Email already in use" });
+            
+        var user = new SpeedAlert.Domain.Entities.User
+        {
+            Email = normalizedEmail,
+            PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.Password),
+            Role = "User",
+            IsActive = true
+        };
+        
+        user.Settings = new SpeedAlert.Domain.Entities.UserSettings { UserId = user.Id };
+        
+        _db.Users.Add(user);
+        await _db.SaveChangesAsync();
+        
+        return Ok(new { user.Id, user.Email, user.IsActive, user.CreatedAt, user.Role });
+    }
+
+    [HttpPut("users/{id}/status")]
+    public async Task<IActionResult> UpdateUserStatus(System.Guid id, [FromBody] UpdateUserStatusDto payload)
+    {
+        var user = await _db.Users.FindAsync(id);
+        if (user == null) return NotFound(new { message = "User not found" });
+
+        if (user.Role == "Admin") return BadRequest(new { message = "Cannot modify admin status" });
+
+        user.IsActive = payload.IsActive;
+        await _db.SaveChangesAsync();
+
+        return Ok(new { message = "User status updated" });
+    }
+
+    [HttpPut("users/{id}/reset-password")]
+    public async Task<IActionResult> ResetUserPassword(System.Guid id, [FromBody] ResetUserPasswordDto payload)
+    {
+        if (!ModelState.IsValid) return BadRequest(ModelState);
+        
+        var user = await _db.Users.FindAsync(id);
+        if (user == null) return NotFound(new { message = "User not found" });
+
+        if (user.Role == "Admin") return BadRequest(new { message = "Cannot reset admin password here" });
+
+        user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(payload.Password);
+        await _db.SaveChangesAsync();
+
+        return Ok(new { message = "Password reset successfully" });
     }
 
     [HttpGet("sessions")]
@@ -151,4 +207,27 @@ public class ProviderConfigUpdateDto
     public bool IsEnabled { get; set; }
     public bool IsSelected { get; set; }
     public int PriorityOrder { get; set; }
+}
+
+public class CreateUserAdminDto
+{
+    [System.ComponentModel.DataAnnotations.Required]
+    [System.ComponentModel.DataAnnotations.EmailAddress]
+    public string Email { get; set; } = null!;
+
+    [System.ComponentModel.DataAnnotations.Required]
+    [System.ComponentModel.DataAnnotations.MinLength(8, ErrorMessage = "Password must be at least 8 characters")]
+    public string Password { get; set; } = null!;
+}
+
+public class UpdateUserStatusDto
+{
+    public bool IsActive { get; set; }
+}
+
+public class ResetUserPasswordDto
+{
+    [System.ComponentModel.DataAnnotations.Required]
+    [System.ComponentModel.DataAnnotations.MinLength(8, ErrorMessage = "Password must be at least 8 characters")]
+    public string Password { get; set; } = null!;
 }

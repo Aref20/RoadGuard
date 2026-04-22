@@ -74,7 +74,22 @@ const dictionaries: Record<Language, TranslationDictionary> = {
     'Connection to .NET API failed.': 'فشل الاتصال بواجهة برمجة تطبيقات .NET.',
     'AUTH_INVALID_CREDENTIALS': 'بيانات الاعتماد غير صالحة',
     'AUTH_EMAIL_IN_USE': 'البريد الإلكتروني قيد الاستخدام بالفعل',
-    'Language': 'اللغة'
+    'Language': 'اللغة',
+    'Users Management': 'إدارة المستخدمين',
+    'Create User': 'إنشاء مستخدم',
+    'Edit User': 'تعديل مستخدم',
+    'Active': 'نشط',
+    'Reset Password': 'إعادة تعيين كلمة المرور',
+    'Confirm Password': 'تأكيد كلمة المرور',
+    'Cancel': 'إلغاء',
+    'Save': 'حفظ',
+    'User successfully created!': 'تم إنشاء المستخدم بنجاح!',
+    'Password must be at least 8 characters.': 'يجب أن تتكون كلمة المرور من 8 أحرف على الأقل.',
+    'Passwords do not match.': 'كلمتا المرور غير متطابقتين.',
+    'User status updated!': 'تم تحديث حالة المستخدم!',
+    'Password reset successfully!': 'تمت إعادة تعيين كلمة المرور بنجاح!',
+    'Role': 'الدور',
+    'Actions': 'الإجراءات'
   },
   en: {
     'Speed Alert': 'Speed Alert',
@@ -141,7 +156,22 @@ const dictionaries: Record<Language, TranslationDictionary> = {
     'Connection to .NET API failed.': 'Connection to .NET API failed.',
     'AUTH_INVALID_CREDENTIALS': 'Invalid credentials',
     'AUTH_EMAIL_IN_USE': 'Email already in use',
-    'Language': 'Language'
+    'Language': 'Language',
+    'Users Management': 'Users Management',
+    'Create User': 'Create User',
+    'Edit User': 'Edit User',
+    'Active': 'Active',
+    'Reset Password': 'Reset Password',
+    'Confirm Password': 'Confirm Password',
+    'Cancel': 'Cancel',
+    'Save': 'Save',
+    'User successfully created!': 'User successfully created!',
+    'Password must be at least 8 characters.': 'Password must be at least 8 characters.',
+    'Passwords do not match.': 'Passwords do not match.',
+    'User status updated!': 'User status updated!',
+    'Password reset successfully!': 'Password reset successfully!',
+    'Role': 'Role',
+    'Actions': 'Actions'
   }
 };
 

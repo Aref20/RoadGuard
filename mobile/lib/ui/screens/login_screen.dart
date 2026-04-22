@@ -27,7 +27,20 @@ class _LoginScreenState extends State<LoginScreen> {
       await Hive.box('settings').put('jwt_token', token);
       if (mounted) Navigator.pushReplacementNamed(context, '/');
     } catch (e) {
-      if (mounted) setState(() => _error = context.tr('loginFailed') ?? 'Login failed. Check credentials.');
+      if (mounted) {
+        String msg = context.tr('loginFailed') ?? 'Login failed. Check credentials.';
+        try {
+          // Assume DioException to get response.data
+          final dioError = e as dynamic;
+          final errData = dioError.response?.data;
+          if (errData != null && errData['code'] == 'AUTH_ACCOUNT_DISABLED') {
+            msg = context.tr('accountDisabled') ?? 'Account is disabled. Contact admin.';
+          } else if (errData != null && errData['code'] == 'AUTH_INVALID_CREDENTIALS') {
+            msg = context.tr('invalidCredentials') ?? 'Invalid email or password.';
+          }
+        } catch (_) {}
+        setState(() => _error = msg);
+      }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }

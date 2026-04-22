@@ -15,6 +15,5 @@ public interface IAppDbContext
     DbSet<RoadLookupCache> RoadLookupCaches { get; }
     DbSet<DeviceStatus> DeviceStatuses { get; }
     DbSet<ProviderConfig> ProviderConfigs { get; }
-    DbSet<ProviderRuntimeSettings> ProviderRuntimeSettings { get; }
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }

@@ -4,7 +4,6 @@ using Microsoft.EntityFrameworkCore;
 using SpeedAlert.Application.Interfaces;
 using SpeedAlert.Infrastructure.Persistence;
 using SpeedAlert.Infrastructure.Services;
-using SpeedAlert.Infrastructure.Options;
 using System;
 
 namespace SpeedAlert.Infrastructure;
@@ -23,13 +22,15 @@ public static class DependencyInjection
         
         // Expose IAppDbContext for Application layer abstraction
         services.AddScoped<IAppDbContext>(provider => provider.GetRequiredService<AppDbContext>());
+        
+        services.AddHttpClient<ISpeedLimitProvider, GoogleRoadsProvider>()
+            .SetHandlerLifetime(TimeSpan.FromMinutes(5));
 
-        services.AddOptions<SpeedProvidersOptions>()
-            .Bind(config.GetSection("SpeedProviders"));
+        services.AddHttpClient<ISpeedLimitProvider, HereSpeedLimitProvider>()
+            .SetHandlerLifetime(TimeSpan.FromMinutes(5));
 
-        services.AddScoped<ISpeedLimitProvider, GoogleRoadsProvider>();
-        services.AddScoped<ISpeedLimitProvider, HereSpeedLimitProvider>();
-        services.AddScoped<ISpeedLimitProvider, TomTomSpeedLimitProvider>();
+        services.AddHttpClient<ISpeedLimitProvider, TomTomSpeedLimitProvider>()
+            .SetHandlerLifetime(TimeSpan.FromMinutes(5));
 
         return services;
     }

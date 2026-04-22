@@ -1,8 +1,8 @@
 {
   "version": 2,
-  "dgSpecHash": "M8eqxVJsm+M=",
+  "dgSpecHash": "6/XNQvi+ic3DYSskBSuym0Z0p5qgwbiy4zrG2DJRKYeHqNqVtOG7YgVAIUsZV45CWRI2i0nQBdkQ3oZUnvfjuw==",
   "success": true,
-  "projectFilePath": "C:\\Users\\LENOVO\\Desktop\\RoadGuard\\backend\\SpeedAlert.Domain\\SpeedAlert.Domain.csproj",
+  "projectFilePath": "/app/applet/backend/SpeedAlert.Domain/SpeedAlert.Domain.csproj",
   "expectedPackageFiles": [],
   "logs": []
 }

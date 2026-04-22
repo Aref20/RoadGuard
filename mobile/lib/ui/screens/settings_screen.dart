@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../../core/api/api_client.dart';
-import '../../core/config/app_config.dart';
 import 'package:hive/hive.dart';
 import '../../l10n/app_localizations.dart';
 
@@ -73,18 +72,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           const Divider(),
           ListTile(
-            title: const Text('Connected Server'),
-            subtitle: Text(AppConfig.apiBaseUrl),
-            leading: const Icon(Icons.cloud_done_outlined),
-          ),
-          ListTile(
-            title: const Text('Environment'),
-            subtitle: Text(AppConfig.environment),
-            leading: const Icon(Icons.settings_ethernet),
+             title: Text(context.tr('language')),
+             trailing: const Icon(Icons.language),
+             onTap: () {
+                final box = Hive.box('settings');
+                final curr = box.get('language', defaultValue: 'ar');
+                box.put('language', curr == 'ar' ? 'en' : 'ar');
+             },
           ),
           const Divider(),
           ListTile(
-            title: const Text('Logout', style: TextStyle(color: Colors.red)),
+            title: Text(context.tr('logout'), style: const TextStyle(color: Colors.red)),
             leading: const Icon(Icons.logout, color: Colors.red),
             onTap: _logout,
           )
