@@ -1,4 +1,7 @@
 export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api';
+export const API_ORIGIN = API_BASE_URL.endsWith('/api')
+  ? API_BASE_URL.slice(0, -4)
+  : API_BASE_URL;
 
 export function getAuthToken(): string | null {
   if (typeof window !== 'undefined') {
@@ -62,6 +65,7 @@ export const api = {
   },
   getProviderSettings: async () => {
     const res = await fetchWithAuth('/admin/provider-settings');
+    if (res.status === 404) return null;
     if (!res.ok) throw new Error('Failed to fetch provider settings');
     return res.json();
   },
@@ -70,6 +74,9 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify(payload)
     });
+    if (res.status === 404) {
+      throw new Error('Provider settings endpoint is not available on the current backend deployment');
+    }
     if (!res.ok) throw new Error('Failed to update provider settings');
     return res.json();
   },

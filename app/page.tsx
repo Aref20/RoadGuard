@@ -9,7 +9,7 @@ import {
   Search, LayoutDashboard, History, LogOut, CheckCircle2,
   Save, Globe, UserPlus, Key, Power, PowerOff
 } from 'lucide-react';
-import { api, getAuthToken, removeAuthToken } from '@/lib/api';
+import { API_BASE_URL, API_ORIGIN, api, getAuthToken, removeAuthToken } from '@/lib/api';
 import * as signalR from '@microsoft/signalr';
 import { useLanguage } from '@/lib/i18n';
 
@@ -56,6 +56,7 @@ export default function AdminDashboard() {
   const [users, setUsers] = useState<User[]>([]);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [providers, setProviders] = useState<ProviderConfig[]>([]);
+  const [providerSettingsAvailable, setProviderSettingsAvailable] = useState(true);
   const [isBackendConnected, setIsBackendConnected] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(true);
   const [savingSettings, setSavingSettings] = useState(false);
@@ -84,11 +85,10 @@ export default function AdminDashboard() {
 
     const fetchInitialData = async () => {
       try {
-        const [healthData, usersData, sessionsData, providersData] = await Promise.all([
+        const [healthData, usersData, sessionsData] = await Promise.all([
           api.getHealth(),
           api.getUsers(),
-          api.getSessions(),
-          api.getProviderSettings().catch(() => []) // Fallback if API hasn't updated yet
+          api.getSessions()
         ]);
         
         setHealth({
@@ -103,7 +103,6 @@ export default function AdminDashboard() {
         });
         setUsers(usersData);
         setSessions(sessionsData);
-        setProviders(providersData);
         setIsBackendConnected(true);
       } catch (err) {
         setIsBackendConnected(false);
@@ -115,7 +114,7 @@ export default function AdminDashboard() {
     fetchInitialData();
 
     const connection = new signalR.HubConnectionBuilder()
-      .withUrl(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'}/hub/telemetry`, {
+      .withUrl(`${API_ORIGIN}/hub/telemetry`, {
         accessTokenFactory: () => token
       })
       .withAutomaticReconnect([0, 2000, 5000, 10000, 30000])
@@ -159,7 +158,51 @@ export default function AdminDashboard() {
     };
   }, [router]);
 
+  useEffect(() => {
+    if (currentView !== 'settings') {
+      return;
+    }
+
+    let isActive = true;
+
+    const loadProviderSettings = async () => {
+      try {
+        const providerData = await api.getProviderSettings();
+        if (!isActive) {
+          return;
+        }
+
+        if (providerData === null) {
+          setProviderSettingsAvailable(false);
+          setProviders([]);
+          return;
+        }
+
+        setProviderSettingsAvailable(true);
+        setProviders(providerData);
+      } catch {
+        if (!isActive) {
+          return;
+        }
+
+        setProviderSettingsAvailable(false);
+        setProviders([]);
+      }
+    };
+
+    loadProviderSettings();
+
+    return () => {
+      isActive = false;
+    };
+  }, [currentView]);
+
   const saveProviderSettings = async () => {
+    if (!providerSettingsAvailable) {
+      alert(t('Provider settings are not available on the current backend deployment.'));
+      return;
+    }
+
     setSavingSettings(true);
     try {
       await api.updateProviderSettings(providers);
@@ -355,7 +398,7 @@ export default function AdminDashboard() {
               <div>
                 <h4 className="text-red-500 font-medium text-sm">{t('WebSocket Disconnected / Backend API Offline')}</h4>
                 <p className="text-red-500/70 text-xs mt-1">
-                  {t('The Web UI is fully functional but unable to establish a WebSocket stream to')} <code className="bg-red-500/20 px-1 py-0.5 rounded">{process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'}</code>. 
+                  {t('The Web UI is fully functional but unable to establish a WebSocket stream to')} <code className="bg-red-500/20 px-1 py-0.5 rounded">{`${API_ORIGIN}/hub/telemetry`}</code>. 
                   {t('Please ensure the Service is running and accepting connections.')}
                 </p>
               </div>
@@ -533,6 +576,11 @@ export default function AdminDashboard() {
                 <div className="px-6 py-5 border-b border-slate-800 bg-slate-900/50 text-sm font-medium text-slate-300">
                   {t('Select Primary Provider')}
                 </div>
+                {!providerSettingsAvailable ? (
+                  <div className="p-6 text-sm text-amber-300 bg-amber-500/10 border-t border-amber-500/20">
+                    {t('Provider settings endpoint is not deployed on the current backend service yet.')} <code className="bg-amber-500/20 px-1 py-0.5 rounded">{API_BASE_URL}/admin/provider-settings</code>
+                  </div>
+                ) : (
                 <div className="p-6 grid grid-cols-1 md:grid-cols-3 gap-4">
                   {providers.map(p => (
                     <div 
@@ -551,6 +599,7 @@ export default function AdminDashboard() {
                     </div>
                   ))}
                 </div>
+                )}
               </div>
 
               <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
@@ -559,7 +608,9 @@ export default function AdminDashboard() {
                   <span className="text-xs text-slate-500">{t('Drag not implemented, use arrows')}</span>
                 </div>
                 <div className="p-6">
-                  {providers.length > 0 ? (
+                  {!providerSettingsAvailable ? (
+                    <div className="text-center py-8 text-slate-500 text-sm">{t('Provider settings are unavailable on this backend deployment.')}</div>
+                  ) : providers.length > 0 ? (
                     <div className="space-y-3">
                       {providers.sort((a,b) => a.priorityOrder - b.priorityOrder).map((p, idx) => (
                         <div key={p.providerKey} className="flex items-center justify-between p-4 rounded-lg border border-slate-800 bg-slate-950/50">
