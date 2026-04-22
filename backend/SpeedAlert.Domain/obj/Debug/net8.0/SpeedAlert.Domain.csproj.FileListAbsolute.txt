@@ -1,0 +1,11 @@
+/app/applet/backend/SpeedAlert.Domain/bin/Debug/net8.0/SpeedAlert.Domain.deps.json
+/app/applet/backend/SpeedAlert.Domain/bin/Debug/net8.0/SpeedAlert.Domain.dll
+/app/applet/backend/SpeedAlert.Domain/bin/Debug/net8.0/SpeedAlert.Domain.pdb
+/app/applet/backend/SpeedAlert.Domain/obj/Debug/net8.0/SpeedAlert.Domain.GeneratedMSBuildEditorConfig.editorconfig
+/app/applet/backend/SpeedAlert.Domain/obj/Debug/net8.0/SpeedAlert.Domain.AssemblyInfoInputs.cache
+/app/applet/backend/SpeedAlert.Domain/obj/Debug/net8.0/SpeedAlert.Domain.AssemblyInfo.cs
+/app/applet/backend/SpeedAlert.Domain/obj/Debug/net8.0/SpeedAlert.Domain.csproj.CoreCompileInputs.cache
+/app/applet/backend/SpeedAlert.Domain/obj/Debug/net8.0/SpeedAlert.Domain.dll
+/app/applet/backend/SpeedAlert.Domain/obj/Debug/net8.0/refint/SpeedAlert.Domain.dll
+/app/applet/backend/SpeedAlert.Domain/obj/Debug/net8.0/SpeedAlert.Domain.pdb
+/app/applet/backend/SpeedAlert.Domain/obj/Debug/net8.0/ref/SpeedAlert.Domain.dll

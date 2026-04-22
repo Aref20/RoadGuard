@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
+import '../../l10n/app_localizations.dart';
 
 class MonitorScreen extends StatefulWidget {
   const MonitorScreen({Key? key}) : super(key: key);
@@ -16,9 +17,9 @@ class _MonitorScreenState extends State<MonitorScreen> {
       stream: FlutterBackgroundService().on('update'),
       builder: (context, snapshot) {
         if (!snapshot.hasData) {
-          return const Scaffold(
+          return Scaffold(
             backgroundColor: Colors.black,
-            body: Center(child: Text("Waiting for GPS telemetry...", style: TextStyle(color: Colors.white54))),
+            body: Center(child: Text(context.tr('waitingForVehicleMotion'), style: const TextStyle(color: Colors.white54))),
           );
         }
 
@@ -26,7 +27,7 @@ class _MonitorScreenState extends State<MonitorScreen> {
         double currentSpeed = (data['currentSpeed'] as num?)?.toDouble() ?? 0.0;
         double speedLimit = (data['speedLimit'] as num?)?.toDouble() ?? -1.0;
         bool isAlerting = data['isAlerting'] == true;
-        String providerStatus = data['providerStatus'] as String? ?? "Unknown";
+        String providerStatus = data['providerStatus'] as String? ?? context.tr('unknown');
         
         final isDanger = speedLimit > 0 && currentSpeed > speedLimit;
         final hasLimit = speedLimit > 0;
@@ -36,7 +37,7 @@ class _MonitorScreenState extends State<MonitorScreen> {
           appBar: AppBar(
             backgroundColor: Colors.transparent,
             elevation: 0,
-            title: const Text('Live Monitor'),
+            title: Text(context.tr('viewLiveMonitor')),
           ),
           body: Center(
             child: Column(
@@ -61,15 +62,15 @@ class _MonitorScreenState extends State<MonitorScreen> {
                   ),
                 ),
                 const SizedBox(height: 24),
-                Text('Limit Status: $providerStatus', style: const TextStyle(color: Colors.white54)),
+                Text('${context.tr('limitStatus')}: $providerStatus', style: const TextStyle(color: Colors.white54)),
                 const SizedBox(height: 48),
                 if (isAlerting)
-                  const Row(
+                  Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.warning, color: Colors.orangeAccent),
-                      SizedBox(width: 8),
-                      Text('SLOW DOWN', style: TextStyle(fontSize: 24, color: Colors.orangeAccent, fontWeight: FontWeight.bold)),
+                      const Icon(Icons.warning, color: Colors.orangeAccent),
+                      const SizedBox(width: 8),
+                      Text(context.tr('speedWarning'), style: const TextStyle(fontSize: 24, color: Colors.orangeAccent, fontWeight: FontWeight.bold)),
                     ],
                   )
               ],

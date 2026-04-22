@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/api/api_client.dart';
 import 'package:hive/hive.dart';
+import '../../l10n/app_localizations.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({Key? key}) : super(key: key);
@@ -26,16 +27,28 @@ class _LoginScreenState extends State<LoginScreen> {
       await Hive.box('settings').put('jwt_token', token);
       if (mounted) Navigator.pushReplacementNamed(context, '/');
     } catch (e) {
-      setState(() => _error = 'Login failed. Check credentials.');
+      if (mounted) setState(() => _error = context.tr('loginFailed') ?? 'Login failed. Check credentials.');
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Speed Alert - Sign In')),
+      appBar: AppBar(
+        title: Text('${context.tr('title')} - ${context.tr('signIn')}'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.language),
+            onPressed: () {
+              final box = Hive.box('settings');
+              final curr = box.get('language', defaultValue: 'ar');
+              box.put('language', curr == 'ar' ? 'en' : 'ar');
+            },
+          )
+        ],
+      ),
       body: Padding(
         padding: const EdgeInsets.all(24.0),
         child: Column(
@@ -48,19 +61,21 @@ class _LoginScreenState extends State<LoginScreen> {
               Text(_error!, style: const TextStyle(color: Colors.red)),
             TextField(
               controller: _emailCtrl,
-              decoration: const InputDecoration(labelText: 'Email', border: OutlineInputBorder()),
+              decoration: InputDecoration(labelText: context.tr('email'), border: const OutlineInputBorder()),
               keyboardType: TextInputType.emailAddress,
+              textDirection: TextDirection.ltr,
             ),
             const SizedBox(height: 16),
             TextField(
               controller: _passCtrl,
-              decoration: const InputDecoration(labelText: 'Password', border: OutlineInputBorder()),
+              decoration: InputDecoration(labelText: context.tr('password'), border: const OutlineInputBorder()),
               obscureText: true,
+              textDirection: TextDirection.ltr,
             ),
             const SizedBox(height: 24),
             ElevatedButton(
               onPressed: _isLoading ? null : _login,
-              child: _isLoading ? const CircularProgressIndicator() : const Text('Login / Register'),
+              child: _isLoading ? const CircularProgressIndicator() : Text(context.tr('login')),
             )
           ],
         ),

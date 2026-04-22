@@ -36,7 +36,7 @@ public class AuthController : ControllerBase
         var normalizedEmail = request.Email.Trim().ToLowerInvariant();
 
         if (await _db.Users.AnyAsync(u => u.Email == normalizedEmail))
-            return BadRequest(new { message = "Email already in use" });
+            return BadRequest(new { code = "AUTH_EMAIL_IN_USE", message = "Email already in use" });
             
         var user = new User
         {
@@ -64,7 +64,7 @@ public class AuthController : ControllerBase
 
         var user = await _db.Users.FirstOrDefaultAsync(u => u.Email == normalizedEmail);
         if (user == null || !BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
-            return Unauthorized(new { message = "Invalid credentials" });
+            return Unauthorized(new { code = "AUTH_INVALID_CREDENTIALS", message = "Invalid credentials" });
             
         return Ok(new { token = GenerateJwt(user) });
     }
