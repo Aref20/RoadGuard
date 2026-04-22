@@ -39,34 +39,29 @@ builder.Services.AddSignalR();
 builder.Services.AddHostedService<TelemetryBroadcastService>();
 
 // CORS Config
-var allowedOrigins = builder.Configuration.GetSection("AllowedOrigins").Get<string[]>() ?? Array.Empty<string>();
+var configuredAllowedOrigins = builder.Configuration.GetSection("AllowedOrigins").Get<string[]>() ?? Array.Empty<string>();
+var allowedOrigins = configuredAllowedOrigins
+    .SelectMany(origin => origin.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+    .Where(origin => !string.IsNullOrWhiteSpace(origin) && origin != "*")
+    .Concat(new[]
+    {
+        "http://localhost:3000",
+        "http://localhost:3001",
+        "https://roadguard-production.up.railway.app",
+        "https://*.up.railway.app"
+    })
+    .Distinct(StringComparer.OrdinalIgnoreCase)
+    .ToArray();
+
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("SecureCorsPolicy", policy =>
     {
-        if (allowedOrigins.Any() && allowedOrigins.Contains("*"))
-        {
-            policy.SetIsOriginAllowed(_ => true)
-                  .AllowAnyMethod()
-                  .AllowAnyHeader()
-                  .AllowCredentials(); // SignalR requires credentials
-        }
-        else if (allowedOrigins.Any())
-        {
-            policy.WithOrigins(allowedOrigins)
-                  .AllowAnyMethod()
-                  .AllowAnyHeader()
-                  .AllowCredentials();
-        }
-        else
-        {
-            // Fallback for strictness if not set: explicitly checking origins dynamically 
-            // allows Railway to work via SetIsOriginAllowed while keeping credentials valid.
-            policy.SetIsOriginAllowed(_ => true) 
-                  .AllowAnyMethod()
-                  .AllowAnyHeader()
-                  .AllowCredentials();
-        }
+        policy.WithOrigins(allowedOrigins)
+              .SetIsOriginAllowedToAllowWildcardSubdomains()
+              .AllowAnyMethod()
+              .AllowAnyHeader()
+              .AllowCredentials();
     });
 });
 

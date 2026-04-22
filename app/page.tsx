@@ -115,7 +115,8 @@ export default function AdminDashboard() {
 
     const connection = new signalR.HubConnectionBuilder()
       .withUrl(`${API_ORIGIN}/hub/telemetry`, {
-        accessTokenFactory: () => token
+        accessTokenFactory: () => token,
+        withCredentials: false
       })
       .withAutomaticReconnect([0, 2000, 5000, 10000, 30000])
       .build();
