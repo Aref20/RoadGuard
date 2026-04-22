@@ -9,7 +9,7 @@ import 'screens/settings_screen.dart';
 import 'screens/history_screen.dart';
 
 class SpeedAlertApp extends StatelessWidget {
-  const SpeedAlertApp({Key? key}) : super(key: key);
+  const SpeedAlertApp({super.key});
 
   ThemeData _buildTheme(String langCode, Brightness brightness) {
     return ThemeData(

@@ -28,6 +28,15 @@ public class AppDbContext : DbContext, IAppDbContext
             .HasIndex(u => u.Email)
             .IsUnique();
 
+        modelBuilder.Entity<DrivingSession>()
+            .HasIndex(s => new { s.UserId, s.Status })
+            .HasFilter("\"Status\" = 'Active'")
+            .IsUnique();
+
+        modelBuilder.Entity<DrivingSession>()
+            .Property(s => s.Status)
+            .HasMaxLength(32);
+
         modelBuilder.Entity<UserSettings>()
             .HasKey(us => us.UserId);
         
@@ -37,7 +46,10 @@ public class AppDbContext : DbContext, IAppDbContext
             .HasForeignKey<UserSettings>(us => us.UserId);
 
         modelBuilder.Entity<RoadLookupCache>()
-            .HasIndex(r => r.CacheKey)
+            .HasIndex(r => new { r.CacheKey, r.SelectedProviderKey })
             .IsUnique();
+
+        modelBuilder.Entity<SessionPoint>()
+            .HasIndex(p => new { p.DrivingSessionId, p.Timestamp });
     }
 }

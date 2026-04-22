@@ -1,73 +1,99 @@
-using Microsoft.AspNetCore.Mvc;
-using SpeedAlert.Application.Interfaces;
-using SpeedAlert.Domain.Entities;
+using System.ComponentModel.DataAnnotations;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
-using System.Threading.Tasks;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using SpeedAlert.Application.Interfaces;
+using SpeedAlert.Application.Services;
+using SpeedAlert.Domain.Entities;
 
 namespace SpeedAlert.Api.Controllers;
 
 [ApiController]
 [Route("api/monitoring")]
-[Authorize]
+[Authorize(Roles = "User")]
 public class DiagnosticsController : ControllerBase
 {
     private readonly IAppDbContext _db;
-    private readonly ISpeedLimitProvider _speedLimitProvider;
+    private readonly ISpeedLimitProviderOrchestrator _orchestrator;
 
-    public DiagnosticsController(IAppDbContext db, ISpeedLimitProvider speedLimitProvider)
+    public DiagnosticsController(IAppDbContext db, ISpeedLimitProviderOrchestrator orchestrator)
     {
         _db = db;
-        _speedLimitProvider = speedLimitProvider;
+        _orchestrator = orchestrator;
     }
 
     [HttpGet("status")]
     [AllowAnonymous]
-    public async Task<IActionResult> GetSystemStatus()
+    public async Task<IActionResult> GetSystemStatus(CancellationToken cancellationToken)
     {
-        bool dbHealthy = false;
-        try {
-            dbHealthy = await ((Microsoft.EntityFrameworkCore.DbContext)_db).Database.CanConnectAsync();
-        } catch { }
+        var databaseStatus = "Disconnected";
+        try
+        {
+            databaseStatus = await ((DbContext)_db).Database.CanConnectAsync(cancellationToken)
+                ? "Connected"
+                : "Disconnected";
+        }
+        catch
+        {
+            databaseStatus = "Disconnected";
+        }
 
-        // Test Provider with a dummy coordinate
-        bool providerHealthy = false;
-        try {
-            var result = await _speedLimitProvider.GetSpeedLimitAsync(0, 0);
-            providerHealthy = true; // If it doesn't throw, we assume it's capable
-        } catch { }
+        var providerStatuses = await _orchestrator.GetProviderStatusesAsync(cancellationToken);
+        var selectedProvider = providerStatuses.FirstOrDefault(status => status.IsSelected);
 
-        return Ok(new {
+        var platformHealth =
+            databaseStatus == "Connected" &&
+            selectedProvider is { IsConfigured: true } &&
+            selectedProvider.HealthStatus is "Healthy" or "Degraded"
+                ? "Healthy"
+                : "Degraded";
+
+        return Ok(new
+        {
             ApiVersion = "1.0",
-            PlatformHealth = dbHealthy && providerHealthy ? "Healthy" : "Degraded",
-            DatabaseStatus = dbHealthy ? "Connected" : "Disconnected",
-            SpeedLimitProviderStatus = providerHealthy ? "Active" : "Offline"
+            PlatformHealth = platformHealth,
+            DatabaseStatus = databaseStatus,
+            SelectedProvider = selectedProvider?.ProviderKey,
+            SelectedProviderStatus = selectedProvider?.HealthStatus ?? "Unknown",
+            Providers = providerStatuses
         });
     }
 
     [HttpPost("device-status")]
-    public async Task<IActionResult> UploadDeviceStatus([FromBody] DeviceStatusDto status)
+    public async Task<IActionResult> UploadDeviceStatus([FromBody] DeviceStatusDto status, CancellationToken cancellationToken)
     {
+        if (!ModelState.IsValid)
+        {
+            return ValidationProblem(ModelState);
+        }
+
         var userIdString = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (!System.Guid.TryParse(userIdString, out var userId)) return Unauthorized();
+        if (!Guid.TryParse(userIdString, out var userId))
+        {
+            return Unauthorized(new { code = "AUTH_UNAUTHORIZED", message = "Authentication is required." });
+        }
 
         var deviceStatus = new DeviceStatus
         {
             UserId = userId,
-            Platform = status.Platform,
+            Platform = status.Platform.Trim(),
             IsBatteryOptimized = status.IsBatteryOptimized,
             BackgroundLocationGranted = status.BackgroundLocationGranted
         };
 
         _db.DeviceStatuses.Add(deviceStatus);
-        await _db.SaveChangesAsync();
-
+        await _db.SaveChangesAsync(cancellationToken);
         return Ok();
     }
 }
 
-public class DeviceStatusDto { 
+public sealed class DeviceStatusDto
+{
+    [Required]
+    [MaxLength(32)]
     public string Platform { get; set; } = null!;
-    public bool IsBatteryOptimized { get; set; } 
+
+    public bool IsBatteryOptimized { get; set; }
     public bool BackgroundLocationGranted { get; set; }
 }

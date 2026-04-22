@@ -28,10 +28,14 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("register")]
-    public async Task<IActionResult> Register([FromBody] AuthDto request)
+    public IActionResult Register([FromBody] AuthDto request)
     {
         // Self-registration is strictly disabled. Users must be created by an Admin.
-        return BadRequest(new { code = "AUTH_SELF_REGISTRATION_DISABLED", message = "Self-registration is disabled. Please contact an administrator." });
+        return StatusCode(StatusCodes.Status403Forbidden, new
+        {
+            code = "AUTH_SELF_REGISTRATION_DISABLED",
+            message = "Self-registration is disabled. Please contact an administrator."
+        });
     }
 
     [HttpPost("login")]
@@ -47,9 +51,9 @@ public class AuthController : ControllerBase
             return Unauthorized(new { code = "AUTH_INVALID_CREDENTIALS", message = "Invalid credentials" });
             
         if (!user.IsActive)
-            return Unauthorized(new { code = "AUTH_ACCOUNT_DISABLED", message = "Account is disabled" });
+            return StatusCode(StatusCodes.Status403Forbidden, new { code = "AUTH_ACCOUNT_DISABLED", message = "Account is disabled" });
             
-        return Ok(new { token = GenerateJwt(user) });
+        return Ok(new { token = GenerateJwt(user), role = user.Role, email = user.Email });
     }
 
     private string GenerateJwt(User user)
@@ -72,7 +76,7 @@ public class AuthController : ControllerBase
         
         var token = new JwtSecurityToken(
             issuer: _config["Jwt:Issuer"] ?? "speedalert-api",
-            audience: _config["Jwt:Audience"] ?? "speedalert-mobile",
+            audience: _config["Jwt:Audience"] ?? "speedalert-clients",
             claims: claims,
             expires: DateTime.UtcNow.AddDays(7),
             signingCredentials: creds

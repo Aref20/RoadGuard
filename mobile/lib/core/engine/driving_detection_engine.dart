@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter_activity_recognition/flutter_activity_recognition.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 
 enum DrivingState { idle, possibleMotion, driving, stoppedTemporarily }
 
@@ -10,37 +11,46 @@ class DrivingDetectionEngine {
 
   Future<void> startListening() async {
     final activityRecognition = FlutterActivityRecognition.instance;
-    
-    // Check permissions
-    PermissionRequestResult reqResult = await activityRecognition.checkPermission();
-    if (reqResult == PermissionRequestResult.PERMANENTLY_DENIED) return;
 
-    _activitySubscription = activityRecognition.activityStream.listen((Activity activity) {
+    var permissionResult = await activityRecognition.checkPermission();
+    if (permissionResult == PermissionRequestResult.DENIED) {
+      permissionResult = await activityRecognition.requestPermission();
+    }
+
+    if (permissionResult != PermissionRequestResult.GRANTED) {
+      return;
+    }
+
+    _activitySubscription = activityRecognition.activityStream.listen((activity) {
       _evaluateActivity(activity);
     });
   }
 
   void _evaluateActivity(Activity activity) async {
-    if (activity.confidence == ActivityConfidence.LOW) return;
+    if (activity.confidence == ActivityConfidence.LOW) {
+      return;
+    }
+
+    final settingsBox = Hive.box('settings');
+    if (settingsBox.get('autoDetectDrivingEnabled', defaultValue: true) != true) {
+      return;
+    }
 
     if (activity.type == ActivityType.IN_VEHICLE) {
       if (_currentState != DrivingState.driving) {
         _currentState = DrivingState.driving;
-        // Promote to active tracking
         final service = FlutterBackgroundService();
         if (!(await service.isRunning())) {
-          service.startService();
+          await service.startService();
         }
       }
     } else if (activity.type == ActivityType.STILL || activity.type == ActivityType.WALKING) {
       if (_currentState == DrivingState.driving) {
         _currentState = DrivingState.stoppedTemporarily;
-        // Stop service after timeout (downshift logic)
         Future.delayed(const Duration(minutes: 5), () async {
           if (_currentState == DrivingState.stoppedTemporarily) {
             _currentState = DrivingState.idle;
-            final service = FlutterBackgroundService();
-            service.invoke('stopService');
+            FlutterBackgroundService().invoke('stopService');
           }
         });
       }

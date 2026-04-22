@@ -1,11 +1,13 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:geolocator/geolocator.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:permission_handler/permission_handler.dart';
 import '../../core/api/api_client.dart';
 import '../../l10n/app_localizations.dart';
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({Key? key}) : super(key: key);
+  const HomeScreen({super.key});
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -16,50 +18,153 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _isServiceEnabled = false;
   bool _isMonitorRunning = false;
   bool _isDriving = false;
+  String? _providerStatus;
+  StreamSubscription<Map<String, dynamic>?>? _serviceSubscription;
+  Future<List<dynamic>>? _sessionsFuture;
 
   @override
   void initState() {
     super.initState();
+    _sessionsFuture = _loadRecentSessions();
     _checkStatus();
-    
-    // Listen to background service updates
-    FlutterBackgroundService().on('update').listen((event) {
-      if (!mounted) return;
+
+    _serviceSubscription = FlutterBackgroundService().on('update').listen((event) {
+      if (!mounted || event == null) {
+        return;
+      }
+
       setState(() {
         _isMonitorRunning = true;
-        _isDriving = event?['isDriving'] == true;
+        _isDriving = event['isDriving'] == true;
+        _providerStatus = event['providerStatus']?.toString();
       });
     });
   }
 
+  @override
+  void dispose() {
+    _serviceSubscription?.cancel();
+    super.dispose();
+  }
+
+  Future<List<dynamic>> _loadRecentSessions() async {
+    try {
+      final response = await ApiClient().dio.get('/sessions');
+      if (response.data is List) {
+        return List<dynamic>.from(response.data as List);
+      }
+    } catch (_) {}
+
+    return [];
+  }
+
   Future<void> _checkStatus() async {
-    bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-    LocationPermission permission = await Geolocator.checkPermission();
-    
+    final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    var permission = await Geolocator.checkPermission();
+    final running = await FlutterBackgroundService().isRunning();
+
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
     }
-    
-    bool running = await FlutterBackgroundService().isRunning();
-    
-    if (mounted) {
-      setState(() {
-        _isServiceEnabled = serviceEnabled;
-        _isLocationGranted = permission == LocationPermission.always || permission == LocationPermission.whileInUse;
-        _isMonitorRunning = running;
-      });
+
+    if (!mounted) {
+      return;
     }
+
+    setState(() {
+      _isServiceEnabled = serviceEnabled;
+      _isLocationGranted = permission == LocationPermission.always || permission == LocationPermission.whileInUse;
+      _isMonitorRunning = running;
+    });
+  }
+
+  Future<bool> _ensureMonitoringPermissions() async {
+    if (!await Geolocator.isLocationServiceEnabled()) {
+      if (!mounted) {
+        return false;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(context.tr('locationServicesDisabled')),
+          action: SnackBarAction(
+            label: context.tr('openSettings'),
+            onPressed: Geolocator.openLocationSettings,
+          ),
+        ),
+      );
+      return false;
+    }
+
+    var permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+    }
+
+    if (permission == LocationPermission.deniedForever) {
+      if (!mounted) {
+        return false;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(context.tr('locationPermissionDeniedForever')),
+          action: SnackBarAction(
+            label: context.tr('openSettings'),
+            onPressed: openAppSettings,
+          ),
+        ),
+      );
+      return false;
+    }
+
+    await Permission.notification.request();
+    await Permission.activityRecognition.request();
+
+    final granted = permission == LocationPermission.always || permission == LocationPermission.whileInUse;
+    if (!granted && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.tr('permissionsRequired'))),
+      );
+    }
+
+    return granted;
   }
 
   Future<void> _toggleService() async {
     final service = FlutterBackgroundService();
-    bool running = await service.isRunning();
+    final running = await service.isRunning();
+
     if (running) {
       service.invoke('stopService');
-      setState(() { _isMonitorRunning = false; _isDriving = false; });
+      if (mounted) {
+        setState(() {
+          _isMonitorRunning = false;
+          _isDriving = false;
+        });
+      }
+      return;
+    }
+
+    if (!await _ensureMonitoringPermissions()) {
+      return;
+    }
+
+    await service.startService();
+    final isRunning = await service.isRunning();
+    if (!mounted) {
+      return;
+    }
+
+    setState(() => _isMonitorRunning = isRunning);
+    if (!isRunning) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.tr('monitorStartFailed'))),
+      );
     } else {
-      await service.startService();
-      setState(() { _isMonitorRunning = true; });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.tr('monitorStartPending'))),
+      );
     }
   }
 
@@ -71,31 +176,27 @@ class _HomeScreenState extends State<HomeScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.history),
-            onPressed: () { 
-              Navigator.pushNamed(context, '/history');
-            },
+            onPressed: () => Navigator.pushNamed(context, '/history'),
           ),
           IconButton(
             icon: const Icon(Icons.settings),
-            onPressed: () { 
-               Navigator.pushNamed(context, '/settings');
-            },
-          )
+            onPressed: () => Navigator.pushNamed(context, '/settings'),
+          ),
         ],
       ),
       body: Padding(
-        padding: const EdgeInsets.all(16.0),
+        padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             _buildStatusCard(context),
             const SizedBox(height: 24),
             ElevatedButton.icon(
-              onPressed: () {
+              onPressed: () async {
                 if (_isMonitorRunning) {
-                   Navigator.pushNamed(context, '/monitor');
+                  Navigator.pushNamed(context, '/monitor');
                 } else {
-                   _toggleService();
+                  await _toggleService();
                 }
               },
               icon: Icon(_isMonitorRunning ? Icons.speed : Icons.play_arrow),
@@ -108,35 +209,46 @@ class _HomeScreenState extends State<HomeScreen> {
             if (_isMonitorRunning)
               TextButton(
                 onPressed: _toggleService,
-                child: Text(context.tr('stopBackgroundMonitor'), style: const TextStyle(color: Colors.red)),
+                child: Text(
+                  context.tr('stopBackgroundMonitor'),
+                  style: const TextStyle(color: Colors.red),
+                ),
               ),
             const SizedBox(height: 12),
-            Text(context.tr('recentSessions'), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            Text(
+              context.tr('recentSessions'),
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
             Expanded(
-              child: FutureBuilder(
-                future: ApiClient().dio.get('/sessions'),
-                builder: (context, AsyncSnapshot snapshot) {
+              child: FutureBuilder<List<dynamic>>(
+                future: _sessionsFuture,
+                builder: (context, snapshot) {
                   if (snapshot.connectionState == ConnectionState.waiting) {
                     return const Center(child: CircularProgressIndicator());
                   }
-                  if (snapshot.hasError || !snapshot.hasData || snapshot.data.data.isEmpty) {
+
+                  final sessions = snapshot.data ?? const [];
+                  if (snapshot.hasError || sessions.isEmpty) {
                     return Center(child: Text(context.tr('noRecentSessionsFound')));
                   }
-                  
-                  final sessions = snapshot.data.data as List;
+
                   return ListView.builder(
                     itemCount: sessions.length,
                     itemBuilder: (context, index) {
-                      final s = sessions[index];
+                      final session = Map<String, dynamic>.from(sessions[index] as Map);
+                      final alertCount = (session['alertEventCount'] as num?)?.toInt() ?? 0;
                       return ListTile(
-                        leading: Icon(s['wasAutoStarted'] == true ? Icons.settings_remote : Icons.car_rental),
-                        title: Text('${context.tr('session')} ${s['id'].toString().substring(0,8)}'),
-                        subtitle: Text(s['startedAt'] ?? context.tr('unknown')),
-                        trailing: Text('${s['alertEventCount'] ?? 0} ${context.tr('alerts')}', style: TextStyle(color: (s['alertEventCount'] ?? 0) > 0 ? Colors.red : Colors.green)),
+                        leading: Icon(session['wasAutoStarted'] == true ? Icons.settings_remote : Icons.car_rental),
+                        title: Text('${context.tr('session')} ${session['id'].toString().substring(0, 8)}'),
+                        subtitle: Text(session['startedAt']?.toString() ?? context.tr('unknown')),
+                        trailing: Text(
+                          '$alertCount ${context.tr('alerts')}',
+                          style: TextStyle(color: alertCount > 0 ? Colors.red : Colors.green),
+                        ),
                       );
-                    }
+                    },
                   );
-                }
+                },
               ),
             )
           ],
@@ -146,43 +258,46 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildStatusCard(BuildContext context) {
-    bool isReady = _isLocationGranted && _isServiceEnabled;
-    
+    final isReady = _isLocationGranted && _isServiceEnabled;
+
     IconData icon;
     Color color;
     String title;
     String subtitle;
-    
+
     if (!isReady) {
-       icon = Icons.error;
-       color = Colors.red;
-       title = context.tr('setupRequired');
-       subtitle = context.tr('setupDesc');
+      icon = Icons.error;
+      color = Colors.red;
+      title = context.tr('setupRequired');
+      subtitle = context.tr('setupDesc');
     } else if (_isDriving) {
-       icon = Icons.directions_car;
-       color = Colors.blue;
-       title = context.tr('activeMonitoring');
-       subtitle = context.tr('activeMonitoringDesc');
+      icon = Icons.directions_car;
+      color = Colors.blue;
+      title = context.tr('activeMonitoring');
+      subtitle = context.tr('activeMonitoringDesc');
     } else if (_isMonitorRunning) {
-       icon = Icons.check_circle;
-       color = Colors.green;
-       title = context.tr('passiveReadinessActive');
-       subtitle = context.tr('waitingForVehicleMotion');
+      icon = Icons.check_circle;
+      color = Colors.green;
+      title = context.tr('passiveReadinessActive');
+      subtitle = _providerStatus ?? context.tr('waitingForVehicleMotion');
     } else {
-       icon = Icons.pause_circle;
-       color = Colors.orange;
-       title = context.tr('monitoringPaused');
-       subtitle = context.tr('monitoringPausedDesc');
+      icon = Icons.pause_circle;
+      color = Colors.orange;
+      title = context.tr('monitoringPaused');
+      subtitle = context.tr('monitoringPausedDesc');
     }
 
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(16.0),
+        padding: const EdgeInsets.all(16),
         child: Column(
           children: [
             Icon(icon, color: color, size: 48),
             const SizedBox(height: 8),
-            Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            Text(
+              title,
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
             Text(subtitle, textAlign: TextAlign.center),
             const SizedBox(height: 16),
             Row(
@@ -198,9 +313,8 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
-  
+
   Widget _buildDiagnosticIcon(IconData icon, Color color) {
     return Icon(icon, color: color);
   }
 }
-

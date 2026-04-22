@@ -3,7 +3,7 @@ import 'package:flutter_background_service/flutter_background_service.dart';
 import '../../l10n/app_localizations.dart';
 
 class MonitorScreen extends StatefulWidget {
-  const MonitorScreen({Key? key}) : super(key: key);
+  const MonitorScreen({super.key});
 
   @override
   State<MonitorScreen> createState() => _MonitorScreenState();
@@ -29,7 +29,6 @@ class _MonitorScreenState extends State<MonitorScreen> {
         bool isAlerting = data['isAlerting'] == true;
         String providerStatus = data['providerStatus'] as String? ?? context.tr('unknown');
         
-        final isDanger = speedLimit > 0 && currentSpeed > speedLimit;
         final hasLimit = speedLimit > 0;
 
         return Scaffold(

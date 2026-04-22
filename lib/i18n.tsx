@@ -1,114 +1,122 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 
 type Language = 'ar' | 'en';
-
-interface TranslationDictionary {
-  [key: string]: string;
-}
+type TranslationDictionary = Record<string, string>;
 
 const dictionaries: Record<Language, TranslationDictionary> = {
   ar: {
-    'Speed Alert': 'تنبيه السرعة',
-    'Dashboard': 'لوحة القيادة',
-    'Provider Settings': 'إعدادات المزود',
+    'Speed Alert': 'رودجارد',
+    'Dashboard': 'لوحة التحكم',
+    'Provider Settings': 'إعدادات المزودين',
     'Sign Out': 'تسجيل الخروج',
-    'Search driver by ID or License...': 'البحث عن سائق بالهوية أو الرخصة...',
-    'AD': 'مدير',
-    'WebSocket Disconnected / Backend API Offline': 'انقطع اتصال WebSocket / واجهة برمجة التطبيقات غير متصلة',
-    'The Web UI is fully functional but unable to establish a WebSocket stream to': 'واجهة الويب تعمل بكامل طاقتها ولكن لا يمكنها إنشاء دفق WebSocket إلى',
-    'Please ensure the Service is running and accepting connections.': 'يرجى التأكد من أن الخدمة قيد التشغيل وتقبل الاتصالات.',
+    'Language': 'اللغة',
     'Overview': 'نظرة عامة',
-    'Real-time telemetry and violation tracking.': 'القياس عن بعد وتتبع المخالفات في الوقت الفعلي.',
+    'Real-time telemetry and violation tracking.': 'متابعة مباشرة للجلسات والمخالفات والتنبيهات.',
     'Database:': 'قاعدة البيانات:',
-    'Healthy': 'متصل',
-    'Disconnected': 'منفصل',
+    'Healthy': 'سليم',
+    'Disconnected': 'غير متصل',
     'Unknown': 'غير معروف',
     'Server Time:': 'وقت الخادم:',
     'Offline': 'غير متصل',
+    'Selected Provider': 'المزود المحدد',
     'Registered Drivers': 'السائقون المسجلون',
-    'Live Socket': 'مقبس مباشر',
+    'Live Socket': 'اتصال مباشر',
     'Active Sessions': 'الجلسات النشطة',
     'Total Sessions': 'إجمالي الجلسات',
     'Total Violations': 'إجمالي المخالفات',
     'Recorded Events': 'الأحداث المسجلة',
-    'Total Alerts Triggered': 'إجمالي التنبيهات الصادرة',
-    'Audio/Haptic Warns': 'تحذيرات صوتية / لمسية',
+    'Total Alerts Triggered': 'إجمالي التنبيهات',
+    'Audio/Haptic Warns': 'تنبيهات صوتية واهتزازية',
     'Live Driving Sessions': 'جلسات القيادة المباشرة',
     'Session ID': 'معرف الجلسة',
     'Started At': 'بدأت في',
     'Trigger': 'طريقة البدء',
+    'Status': 'الحالة',
     'No active driving sessions.': 'لا توجد جلسات قيادة نشطة.',
     'Connect to backend to view sessions.': 'اتصل بالخادم لعرض الجلسات.',
     'Auto-Detected': 'تلقائي',
     'Manual': 'يدوي',
-    'Driver Roster': 'قائمة السائقين',
-    'Email': 'البريد الإلكتروني',
-    'Registered': 'تاريخ التسجيل',
-    'Status': 'الحالة',
-    'No users registered.': 'لا يوجد مستخدمون مسجلون.',
-    'Connect to backend to view users.': 'اتصل بالخادم لعرض المستخدمين.',
-    'Speed Providers': 'موفرو السرعة',
-    'Configure primary and fallback providers for speed limit checks.': 'تكوين المزودين الأساسيين والاحتياطيين لفحوصات حدود السرعة.',
-    'Saving...': 'جاري الحفظ...',
+    'Speed Providers': 'مزودو حدود السرعة',
+    'Configure primary and fallback providers for speed limit checks.': 'حدد المزود الأساسي وترتيب المزودين الاحتياطيين لفحص حدود السرعة.',
+    'Saving...': 'جارٍ الحفظ...',
     'Save Settings': 'حفظ الإعدادات',
-    'Select Primary Provider': 'تحديد المزود الأساسي',
-    'API': 'API',
-    'Fallback Strategy (Priority Order)': 'استراتيجية الاحتياطي (حسب الأولوية)',
-    'Drag not implemented, use arrows': 'السحب غير مدعوم، استخدم الأسهم',
+    'Select Primary Provider': 'اختيار المزود الأساسي',
+    'Configured': 'مهيأ',
+    'Not Configured': 'غير مهيأ',
+    'Fallback Strategy (Priority Order)': 'ترتيب المزودين الاحتياطيين',
+    'Use the arrows to change fallback priority.': 'استخدم الأسهم لتغيير ترتيب المزودين.',
     'Primary': 'أساسي',
     'Enabled': 'مفعل',
     'Disabled': 'معطل',
-    'No providers found.': 'لم يتم العثور على مزودين.',
-    'Settings saved successfully!': 'تم حفظ الإعدادات بنجاح!',
-    'Failed to save settings': 'فشل حفظ الإعدادات',
-    'Speed Alert Admin': 'مسؤول تنبيه السرعة',
-    'Sign in to access telemetry dashboard': 'تسجيل الدخول للوصول إلى لوحة معلومات القياس عن بعد',
-    'Admin Email': 'البريد الإلكتروني للمسؤول',
-    'Password': 'كلمة المرور',
-    'Sign In': 'تسجيل الدخول',
-    'Backend API expects': 'يتوقع الخادم عنوان',
-    'Invalid Admin Credentials or Backend Offline': 'بيانات الاعتماد غير صالحة أو الخادم غير متصل',
-    'No token received': 'لم يتم استلام رمز التحقق',
-    'Connection to .NET API failed.': 'فشل الاتصال بواجهة برمجة تطبيقات .NET.',
-    'AUTH_INVALID_CREDENTIALS': 'بيانات الاعتماد غير صالحة',
-    'AUTH_EMAIL_IN_USE': 'البريد الإلكتروني قيد الاستخدام بالفعل',
-    'Language': 'اللغة',
+    'No providers found.': 'لا يوجد مزودون.',
     'Users Management': 'إدارة المستخدمين',
+    'Manage mobile user accounts, access, and password resets.': 'إدارة حسابات تطبيق الهاتف، التفعيل، وإعادة تعيين كلمات المرور.',
     'Create User': 'إنشاء مستخدم',
-    'Edit User': 'تعديل مستخدم',
+    'Edit User': 'تعديل المستخدم',
+    'Email': 'البريد الإلكتروني',
+    'Role': 'الدور',
     'Active': 'نشط',
+    'Registered': 'تاريخ الإنشاء',
+    'Actions': 'الإجراءات',
+    'No users registered.': 'لا يوجد مستخدمون.',
+    'Connect to backend to view users.': 'اتصل بالخادم لعرض المستخدمين.',
+    'Deactivate': 'إيقاف',
+    'Activate': 'تفعيل',
     'Reset Password': 'إعادة تعيين كلمة المرور',
-    'Confirm Password': 'تأكيد كلمة المرور',
     'Cancel': 'إلغاء',
     'Save': 'حفظ',
-    'User successfully created!': 'تم إنشاء المستخدم بنجاح!',
-    'Password must be at least 8 characters.': 'يجب أن تتكون كلمة المرور من 8 أحرف على الأقل.',
+    'Password': 'كلمة المرور',
+    'Confirm Password': 'تأكيد كلمة المرور',
     'Passwords do not match.': 'كلمتا المرور غير متطابقتين.',
-    'User status updated!': 'تم تحديث حالة المستخدم!',
-    'Password reset successfully!': 'تمت إعادة تعيين كلمة المرور بنجاح!',
-    'Role': 'الدور',
-    'Actions': 'الإجراءات'
+    'Password must be at least 8 characters.': 'يجب أن تكون كلمة المرور 8 أحرف على الأقل.',
+    'User successfully created!': 'تم إنشاء المستخدم بنجاح.',
+    'User status updated!': 'تم تحديث حالة المستخدم.',
+    'Password reset successfully!': 'تمت إعادة تعيين كلمة المرور بنجاح.',
+    'Failed to create user.': 'تعذر إنشاء المستخدم.',
+    'Failed to reset password.': 'تعذرت إعادة تعيين كلمة المرور.',
+    'Failed to update user status.': 'تعذر تحديث حالة المستخدم.',
+    'Settings saved successfully!': 'تم حفظ الإعدادات بنجاح.',
+    'Failed to save settings': 'تعذر حفظ الإعدادات.',
+    'Admin Control Center': 'مركز تحكم الإدارة',
+    'Secure telemetry, provider controls, and mobile user management.': 'لوحة آمنة للقياس الحي، التحكم بالمزودين، وإدارة مستخدمي الهاتف.',
+    'Connected': 'متصل',
+    'Dismiss': 'إخفاء',
+    'WebSocket Disconnected / Backend API Offline': 'انقطع اتصال البث المباشر أو أن الخادم غير متاح',
+    'The admin UI is running, but the backend telemetry stream is unavailable right now.': 'واجهة الإدارة تعمل، لكن بث القياس المباشر من الخادم غير متاح حالياً.',
+    'Speed Alert Admin': 'إدارة رودجارد',
+    'Sign in to access telemetry dashboard': 'سجل الدخول للوصول إلى لوحة الإدارة والقياس المباشر.',
+    'Admin Email': 'بريد المدير',
+    'Sign In': 'تسجيل الدخول',
+    'Backend API expects': 'عنوان الخادم الحالي',
+    'Connection to .NET API failed.': 'تعذر الاتصال بخادم .NET.',
+    'AUTH_INVALID_CREDENTIALS': 'بيانات الدخول غير صحيحة.',
+    'AUTH_EMAIL_IN_USE': 'البريد الإلكتروني مستخدم بالفعل.',
+    'AUTH_ACCOUNT_DISABLED': 'الحساب معطل. يرجى التواصل مع المدير.',
+    'AUTH_FORBIDDEN': 'هذا الحساب لا يملك صلاحية الوصول إلى لوحة الإدارة.',
+    'AUTH_UNAUTHORIZED': 'يلزم تسجيل الدخول أولاً.',
+    'AUTH_SELF_REGISTRATION_DISABLED': 'إنشاء الحسابات العامة متوقف. يجب أن ينشئ المدير الحساب.',
+    'No token received': 'لم يتم استلام رمز الدخول.',
+    'Failed to fetch dashboard data.': 'تعذر تحميل بيانات لوحة الإدارة.',
+    'SignalR connection failed.': 'تعذر بدء الاتصال المباشر.',
+    'Failed to fetch provider settings.': 'تعذر تحميل إعدادات المزودين.',
   },
   en: {
-    'Speed Alert': 'Speed Alert',
+    'Speed Alert': 'RoadGuard',
     'Dashboard': 'Dashboard',
     'Provider Settings': 'Provider Settings',
     'Sign Out': 'Sign Out',
-    'Search driver by ID or License...': 'Search driver by ID or License...',
-    'AD': 'AD',
-    'WebSocket Disconnected / Backend API Offline': 'WebSocket Disconnected / Backend API Offline',
-    'The Web UI is fully functional but unable to establish a WebSocket stream to': 'The Web UI is fully functional but unable to establish a WebSocket stream to',
-    'Please ensure the Service is running and accepting connections.': 'Please ensure the Service is running and accepting connections.',
+    'Language': 'Language',
     'Overview': 'Overview',
-    'Real-time telemetry and violation tracking.': 'Real-time telemetry and violation tracking.',
+    'Real-time telemetry and violation tracking.': 'Real-time session, violation, and alert telemetry.',
     'Database:': 'Database:',
     'Healthy': 'Healthy',
     'Disconnected': 'Disconnected',
     'Unknown': 'Unknown',
     'Server Time:': 'Server Time:',
     'Offline': 'Offline',
+    'Selected Provider': 'Selected Provider',
     'Registered Drivers': 'Registered Drivers',
     'Live Socket': 'Live Socket',
     'Active Sessions': 'Active Sessions',
@@ -121,85 +129,100 @@ const dictionaries: Record<Language, TranslationDictionary> = {
     'Session ID': 'Session ID',
     'Started At': 'Started At',
     'Trigger': 'Trigger',
+    'Status': 'Status',
     'No active driving sessions.': 'No active driving sessions.',
-    'Connect to backend to view sessions.': 'Connect to backend to view sessions.',
+    'Connect to backend to view sessions.': 'Connect to the backend to view sessions.',
     'Auto-Detected': 'Auto-Detected',
     'Manual': 'Manual',
-    'Driver Roster': 'Driver Roster',
-    'Email': 'Email',
-    'Registered': 'Registered',
-    'Status': 'Status',
-    'No users registered.': 'No users registered.',
-    'Connect to backend to view users.': 'Connect to backend to view users.',
     'Speed Providers': 'Speed Providers',
-    'Configure primary and fallback providers for speed limit checks.': 'Configure primary and fallback providers for speed limit checks.',
+    'Configure primary and fallback providers for speed limit checks.': 'Configure the primary provider and fallback order for speed-limit lookups.',
     'Saving...': 'Saving...',
     'Save Settings': 'Save Settings',
     'Select Primary Provider': 'Select Primary Provider',
-    'API': 'API',
+    'Configured': 'Configured',
+    'Not Configured': 'Not Configured',
     'Fallback Strategy (Priority Order)': 'Fallback Strategy (Priority Order)',
-    'Drag not implemented, use arrows': 'Drag not implemented, use arrows',
+    'Use the arrows to change fallback priority.': 'Use the arrows to change fallback priority.',
     'Primary': 'Primary',
     'Enabled': 'Enabled',
     'Disabled': 'Disabled',
     'No providers found.': 'No providers found.',
-    'Settings saved successfully!': 'Settings saved successfully!',
-    'Failed to save settings': 'Failed to save settings',
-    'Speed Alert Admin': 'Speed Alert Admin',
-    'Sign in to access telemetry dashboard': 'Sign in to access telemetry dashboard',
-    'Admin Email': 'Admin Email',
-    'Password': 'Password',
-    'Sign In': 'Sign In',
-    'Backend API expects': 'Backend API expects',
-    'Invalid Admin Credentials or Backend Offline': 'Invalid Admin Credentials or Backend Offline',
-    'No token received': 'No token received',
-    'Connection to .NET API failed.': 'Connection to .NET API failed.',
-    'AUTH_INVALID_CREDENTIALS': 'Invalid credentials',
-    'AUTH_EMAIL_IN_USE': 'Email already in use',
-    'Language': 'Language',
     'Users Management': 'Users Management',
+    'Manage mobile user accounts, access, and password resets.': 'Manage mobile users, account access, and password resets.',
     'Create User': 'Create User',
     'Edit User': 'Edit User',
+    'Email': 'Email',
+    'Role': 'Role',
     'Active': 'Active',
+    'Registered': 'Registered',
+    'Actions': 'Actions',
+    'No users registered.': 'No users registered.',
+    'Connect to backend to view users.': 'Connect to the backend to view users.',
+    'Deactivate': 'Deactivate',
+    'Activate': 'Activate',
     'Reset Password': 'Reset Password',
-    'Confirm Password': 'Confirm Password',
     'Cancel': 'Cancel',
     'Save': 'Save',
-    'User successfully created!': 'User successfully created!',
-    'Password must be at least 8 characters.': 'Password must be at least 8 characters.',
+    'Password': 'Password',
+    'Confirm Password': 'Confirm Password',
     'Passwords do not match.': 'Passwords do not match.',
-    'User status updated!': 'User status updated!',
-    'Password reset successfully!': 'Password reset successfully!',
-    'Role': 'Role',
-    'Actions': 'Actions'
-  }
+    'Password must be at least 8 characters.': 'Password must be at least 8 characters.',
+    'User successfully created!': 'User successfully created.',
+    'User status updated!': 'User status updated.',
+    'Password reset successfully!': 'Password reset successfully.',
+    'Failed to create user.': 'Failed to create user.',
+    'Failed to reset password.': 'Failed to reset password.',
+    'Failed to update user status.': 'Failed to update user status.',
+    'Settings saved successfully!': 'Settings saved successfully.',
+    'Failed to save settings': 'Failed to save settings.',
+    'Admin Control Center': 'Admin Control Center',
+    'Secure telemetry, provider controls, and mobile user management.': 'Secure telemetry, provider controls, and mobile user management.',
+    'Connected': 'Connected',
+    'Dismiss': 'Dismiss',
+    'WebSocket Disconnected / Backend API Offline': 'WebSocket disconnected / backend API offline',
+    'The admin UI is running, but the backend telemetry stream is unavailable right now.': 'The admin UI is running, but the backend telemetry stream is unavailable right now.',
+    'Speed Alert Admin': 'RoadGuard Admin',
+    'Sign in to access telemetry dashboard': 'Sign in to access the telemetry dashboard.',
+    'Admin Email': 'Admin Email',
+    'Sign In': 'Sign In',
+    'Backend API expects': 'Current backend origin',
+    'Connection to .NET API failed.': 'Connection to the .NET API failed.',
+    'AUTH_INVALID_CREDENTIALS': 'Invalid email or password.',
+    'AUTH_EMAIL_IN_USE': 'Email is already in use.',
+    'AUTH_ACCOUNT_DISABLED': 'This account is disabled. Please contact an administrator.',
+    'AUTH_FORBIDDEN': 'This account does not have permission to access the admin dashboard.',
+    'AUTH_UNAUTHORIZED': 'Authentication is required.',
+    'AUTH_SELF_REGISTRATION_DISABLED': 'Public self-registration is disabled. An administrator must create the account.',
+    'No token received': 'No token received.',
+    'Failed to fetch dashboard data.': 'Failed to fetch dashboard data.',
+    'SignalR connection failed.': 'SignalR connection failed.',
+    'Failed to fetch provider settings.': 'Failed to fetch provider settings.',
+  },
 };
 
-interface LanguageContextProps {
+type LanguageContextProps = {
   language: Language;
   setLanguage: (lang: Language) => void;
   t: (key: string) => string;
   isRtl: boolean;
-}
+};
 
 const LanguageContext = createContext<LanguageContextProps | undefined>(undefined);
 
-export const LanguageProvider = ({ children }: { children: ReactNode }) => {
-  const [language, setLanguageState] = useState<Language>('ar');
-  const [mounted, setMounted] = useState(false);
+export function LanguageProvider({ children }: { children: React.ReactNode }) {
+  const [language, setLanguageState] = useState<Language>(() => {
+    if (typeof window === 'undefined') {
+      return 'ar';
+    }
+
+    const storedLanguage = localStorage.getItem('appLang');
+    return storedLanguage === 'ar' || storedLanguage === 'en' ? storedLanguage : 'ar';
+  });
 
   useEffect(() => {
-    const storedLang = localStorage.getItem('appLang') as Language;
-    if (storedLang && (storedLang === 'ar' || storedLang === 'en')) {
-      setLanguageState(storedLang);
-      document.documentElement.dir = storedLang === 'ar' ? 'rtl' : 'ltr';
-      document.documentElement.lang = storedLang;
-    } else {
-      document.documentElement.dir = 'rtl';
-      document.documentElement.lang = 'ar';
-    }
-    setMounted(true);
-  }, []);
+    document.documentElement.dir = language === 'ar' ? 'rtl' : 'ltr';
+    document.documentElement.lang = language;
+  }, [language]);
 
   const setLanguage = (lang: Language) => {
     setLanguageState(lang);
@@ -208,25 +231,21 @@ export const LanguageProvider = ({ children }: { children: ReactNode }) => {
     document.documentElement.lang = lang;
   };
 
-  const t = (key: string): string => {
-    return dictionaries[language][key] || dictionaries['ar'][key] || key;
-  };
+  const value = useMemo<LanguageContextProps>(() => ({
+    language,
+    setLanguage,
+    t: (key: string) => dictionaries[language][key] || dictionaries.ar[key] || key,
+    isRtl: language === 'ar',
+  }), [language]);
 
-  if (!mounted) {
-    return null; // Avoid hydration mismatch
-  }
+  return <LanguageContext.Provider value={value}>{children}</LanguageContext.Provider>;
+}
 
-  return (
-    <LanguageContext.Provider value={{ language, setLanguage, t, isRtl: language === 'ar' }}>
-      {children}
-    </LanguageContext.Provider>
-  );
-};
-
-export const useLanguage = () => {
+export function useLanguage() {
   const context = useContext(LanguageContext);
-  if (context === undefined) {
+  if (!context) {
     throw new Error('useLanguage must be used within a LanguageProvider');
   }
+
   return context;
-};
+}

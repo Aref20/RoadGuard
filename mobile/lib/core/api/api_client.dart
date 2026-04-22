@@ -2,37 +2,49 @@ import 'package:dio/dio.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 
 class ApiClient {
-  static final ApiClient _instance = ApiClient._internal();
-  late Dio _dio;
-
-  factory ApiClient() {
-    return _instance;
-  }
-
   ApiClient._internal() {
     _dio = Dio(BaseOptions(
-      baseUrl: const String.fromEnvironment('API_BASE_URL', defaultValue: 'http://10.0.2.2:8080/api'),
-      connectTimeout: const Duration(seconds: 10),
-      receiveTimeout: const Duration(seconds: 10),
+      baseUrl: _defaultBaseUrl,
+      connectTimeout: const Duration(seconds: 15),
+      receiveTimeout: const Duration(seconds: 15),
+      sendTimeout: const Duration(seconds: 15),
+      headers: {'Accept': 'application/json'},
     ));
 
     _dio.interceptors.add(InterceptorsWrapper(
       onRequest: (options, handler) async {
         final box = Hive.box('settings');
+        final configuredBaseUrl = (box.get('api_base_url', defaultValue: _defaultBaseUrl) as String?)?.trim();
+        options.baseUrl = configuredBaseUrl == null || configuredBaseUrl.isEmpty ? _defaultBaseUrl : configuredBaseUrl;
+
         final token = box.get('jwt_token');
         if (token != null) {
           options.headers['Authorization'] = 'Bearer $token';
         }
-        return handler.next(options);
+
+        handler.next(options);
       },
-      onError: (DioException e, handler) async {
-        if (e.response?.statusCode == 401) {
-          // Token expired, handle logout/refresh logic
-          Hive.box('settings').delete('jwt_token');
+      onError: (error, handler) async {
+        if (error.response?.statusCode == 401 || error.response?.statusCode == 403) {
+          await Hive.box('settings').delete('jwt_token');
         }
-        return handler.next(e);
+
+        handler.next(error);
       },
     ));
+  }
+
+  static const String _defaultBaseUrl = String.fromEnvironment(
+    'API_BASE_URL',
+    defaultValue: 'https://api-production-ecc5.up.railway.app/api',
+  );
+
+  static final ApiClient _instance = ApiClient._internal();
+
+  late final Dio _dio;
+
+  factory ApiClient() {
+    return _instance;
   }
 
   Dio get dio => _dio;

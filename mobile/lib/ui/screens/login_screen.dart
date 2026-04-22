@@ -1,10 +1,11 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
-import '../../core/api/api_client.dart';
 import 'package:hive/hive.dart';
+import '../../core/api/api_client.dart';
 import '../../l10n/app_localizations.dart';
 
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({Key? key}) : super(key: key);
+  const LoginScreen({super.key});
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -16,33 +17,71 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _isLoading = false;
   String? _error;
 
+  @override
+  void dispose() {
+    _emailCtrl.dispose();
+    _passCtrl.dispose();
+    super.dispose();
+  }
+
   Future<void> _login() async {
-    setState(() { _isLoading = true; _error = null; });
+    final localizations = AppLocalizations.of(context);
+
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+
     try {
-      final res = await ApiClient().dio.post('/auth/login', data: {
+      final response = await ApiClient().dio.post('/auth/login', data: {
         'email': _emailCtrl.text.trim(),
         'password': _passCtrl.text.trim(),
       });
-      final token = res.data['token'];
+
+      if ((response.data['role'] as String?) == 'Admin') {
+        if (!mounted) {
+          return;
+        }
+
+        setState(() => _error = localizations.translate('adminNotAllowedOnMobile'));
+        return;
+      }
+
+      final token = response.data['token'] as String?;
+      if (token == null || token.isEmpty) {
+        if (!mounted) {
+          return;
+        }
+
+        setState(() => _error = localizations.translate('loginFailed'));
+        return;
+      }
+
       await Hive.box('settings').put('jwt_token', token);
-      if (mounted) Navigator.pushReplacementNamed(context, '/');
-    } catch (e) {
       if (mounted) {
-        String msg = context.tr('loginFailed') ?? 'Login failed. Check credentials.';
-        try {
-          // Assume DioException to get response.data
-          final dioError = e as dynamic;
-          final errData = dioError.response?.data;
-          if (errData != null && errData['code'] == 'AUTH_ACCOUNT_DISABLED') {
-            msg = context.tr('accountDisabled') ?? 'Account is disabled. Contact admin.';
-          } else if (errData != null && errData['code'] == 'AUTH_INVALID_CREDENTIALS') {
-            msg = context.tr('invalidCredentials') ?? 'Invalid email or password.';
-          }
-        } catch (_) {}
-        setState(() => _error = msg);
+        Navigator.pushReplacementNamed(context, '/');
+      }
+    } on DioException catch (error) {
+      String message = localizations.translate('loginFailed');
+      final code = error.response?.data is Map ? error.response?.data['code']?.toString() : null;
+
+      if (code == 'AUTH_ACCOUNT_DISABLED') {
+        message = localizations.translate('accountDisabled');
+      } else if (code == 'AUTH_INVALID_CREDENTIALS') {
+        message = localizations.translate('invalidCredentials');
+      }
+
+      if (mounted) {
+        setState(() => _error = message);
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _error = localizations.translate('loginFailed'));
       }
     } finally {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -54,41 +93,60 @@ class _LoginScreenState extends State<LoginScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.language),
-            onPressed: () {
+            onPressed: () async {
               final box = Hive.box('settings');
-              final curr = box.get('language', defaultValue: 'ar');
-              box.put('language', curr == 'ar' ? 'en' : 'ar');
+              final currentLanguage = box.get('language', defaultValue: 'ar');
+              await box.put('language', currentLanguage == 'ar' ? 'en' : 'ar');
             },
           )
         ],
       ),
       body: Padding(
-        padding: const EdgeInsets.all(24.0),
+        padding: const EdgeInsets.all(24),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             const Icon(Icons.speed, size: 80, color: Colors.blueAccent),
             const SizedBox(height: 32),
-            if (_error != null) 
-              Text(_error!, style: const TextStyle(color: Colors.red)),
+            if (_error != null)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 16),
+                child: Text(
+                  _error!,
+                  style: const TextStyle(color: Colors.red),
+                  textAlign: TextAlign.center,
+                ),
+              ),
             TextField(
               controller: _emailCtrl,
-              decoration: InputDecoration(labelText: context.tr('email'), border: const OutlineInputBorder()),
+              decoration: InputDecoration(
+                labelText: context.tr('email'),
+                border: const OutlineInputBorder(),
+              ),
               keyboardType: TextInputType.emailAddress,
               textDirection: TextDirection.ltr,
             ),
             const SizedBox(height: 16),
             TextField(
               controller: _passCtrl,
-              decoration: InputDecoration(labelText: context.tr('password'), border: const OutlineInputBorder()),
+              decoration: InputDecoration(
+                labelText: context.tr('password'),
+                border: const OutlineInputBorder(),
+              ),
               obscureText: true,
               textDirection: TextDirection.ltr,
             ),
             const SizedBox(height: 24),
             ElevatedButton(
               onPressed: _isLoading ? null : _login,
-              child: _isLoading ? const CircularProgressIndicator() : Text(context.tr('login')),
+              child: _isLoading
+                  ? const SizedBox(
+                      height: 18,
+                      width: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : Text(context.tr('login')),
             )
           ],
         ),

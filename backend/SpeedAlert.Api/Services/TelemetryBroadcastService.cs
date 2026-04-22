@@ -2,8 +2,10 @@ using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using SpeedAlert.Api.Hubs;
 using SpeedAlert.Application.Interfaces;
+using SpeedAlert.Application.Services;
 using System;
 using System.Linq;
 using System.Threading;
@@ -15,11 +17,16 @@ public class TelemetryBroadcastService : BackgroundService
 {
     private readonly IServiceProvider _serviceProvider;
     private readonly IHubContext<TelemetryHub> _hubContext;
+    private readonly ILogger<TelemetryBroadcastService> _logger;
 
-    public TelemetryBroadcastService(IServiceProvider serviceProvider, IHubContext<TelemetryHub> hubContext)
+    public TelemetryBroadcastService(
+        IServiceProvider serviceProvider,
+        IHubContext<TelemetryHub> hubContext,
+        ILogger<TelemetryBroadcastService> logger)
     {
         _serviceProvider = serviceProvider;
         _hubContext = hubContext;
+        _logger = logger;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -30,19 +37,26 @@ public class TelemetryBroadcastService : BackgroundService
             {
                 using var scope = _serviceProvider.CreateScope();
                 var db = scope.ServiceProvider.GetRequiredService<IAppDbContext>();
+                var orchestrator = scope.ServiceProvider.GetRequiredService<ISpeedLimitProviderOrchestrator>();
                 
-                // Fetch Health
                 var totalUsers = await db.Users.CountAsync(stoppingToken);
                 var totalSessions = await db.Sessions.CountAsync(stoppingToken);
                 var activeSessions = await db.Sessions.CountAsync(s => s.Status == "Active", stoppingToken);
                 var autoStartedSessions = await db.Sessions.CountAsync(s => s.WasAutoStarted, stoppingToken);
                 var totalViolations = await db.Sessions.SumAsync(s => s.OverspeedEventCount, stoppingToken);
                 var totalAlerts = await db.Sessions.SumAsync(s => s.AlertEventCount, stoppingToken);
+                var providerStatuses = await orchestrator.GetProviderStatusesAsync(stoppingToken);
+                var selectedProvider = providerStatuses.FirstOrDefault(status => status.IsSelected);
 
                 bool dbHealthy = false;
-                try {
+                try
+                {
                     dbHealthy = await ((DbContext)db).Database.CanConnectAsync(stoppingToken);
-                } catch { }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to probe database connectivity for telemetry health.");
+                }
 
                 var health = new
                 {
@@ -53,15 +67,15 @@ public class TelemetryBroadcastService : BackgroundService
                     TotalViolations = totalViolations,
                     TotalAlerts = totalAlerts,
                     ServerTime = DateTime.UtcNow,
-                    DatabaseStatus = dbHealthy ? "Healthy" : "Disconnected"
+                    DatabaseStatus = dbHealthy ? "Healthy" : "Disconnected",
+                    SelectedProvider = selectedProvider?.ProviderKey,
+                    ProviderHealth = selectedProvider?.HealthStatus ?? "Unknown"
                 };
 
-                // Fetch Users
                 var users = await db.Users
                     .Select(u => new { u.Id, u.Email, u.IsActive, u.CreatedAt })
                     .ToListAsync(stoppingToken);
 
-                // Fetch Sessions
                 var sessions = await db.Sessions
                     .OrderByDescending(s => s.StartedAt)
                     .Take(100)
@@ -79,17 +93,20 @@ public class TelemetryBroadcastService : BackgroundService
                     })
                     .ToListAsync(stoppingToken);
 
-                // Broadcast
-                await _hubContext.Clients.All.SendAsync("ReceiveHealth", health, stoppingToken);
-                await _hubContext.Clients.All.SendAsync("ReceiveUsers", users, stoppingToken);
-                await _hubContext.Clients.All.SendAsync("ReceiveSessions", sessions, stoppingToken);
+                await _hubContext.Clients.Group(TelemetryHub.AdminGroup).SendAsync("ReceiveHealth", health, stoppingToken);
+                await _hubContext.Clients.Group(TelemetryHub.AdminGroup).SendAsync("ReceiveUsers", users, stoppingToken);
+                await _hubContext.Clients.Group(TelemetryHub.AdminGroup).SendAsync("ReceiveSessions", sessions, stoppingToken);
             }
-            catch (Exception)
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
-                // Optionally log exception, but keep loop alive
+                break;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Telemetry broadcast iteration failed.");
             }
 
-            await Task.Delay(10000, stoppingToken); // Broadcast every 10 seconds
+            await Task.Delay(TimeSpan.FromSeconds(10), stoppingToken);
         }
     }
 }

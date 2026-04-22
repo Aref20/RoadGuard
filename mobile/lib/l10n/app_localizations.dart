@@ -1,113 +1,170 @@
 import 'package:flutter/material.dart';
 
 class AppLocalizations {
-  final Locale locale;
-
   AppLocalizations(this.locale);
+
+  final Locale locale;
 
   static AppLocalizations of(BuildContext context) {
     return Localizations.of<AppLocalizations>(context, AppLocalizations)!;
   }
 
-  static const LocalizationsDelegate<AppLocalizations> delegate =
-      _AppLocalizationsDelegate();
+  static const LocalizationsDelegate<AppLocalizations> delegate = _AppLocalizationsDelegate();
 
   static const Map<String, Map<String, String>> _localizedValues = {
     'en': {
-      'title': 'Speed Alert',
+      'title': 'RoadGuard',
       'login': 'Login',
       'email': 'Email',
       'password': 'Password',
       'signIn': 'Sign In',
-      'loginFailed': 'Login failed. Check credentials.',
-      'accountDisabled': 'Account is disabled. Contact admin.',
+      'loginFailed': 'Login failed. Please check your credentials.',
+      'accountDisabled': 'This account is disabled. Contact an administrator.',
       'invalidCredentials': 'Invalid email or password.',
-      'setupRequired': 'Setup Required',
-      'setupDesc': 'Please enable location services and grant permissions.',
-      'activeMonitoring': 'Active Monitoring',
-      'activeMonitoringDesc': 'Vehicle motion detected. Safe travels!',
+      'adminNotAllowedOnMobile': 'Admin accounts must use the web dashboard.',
+      'setupRequired': 'Setup required',
+      'setupDesc': 'Enable location services and grant the required permissions.',
+      'activeMonitoring': 'Active monitoring',
+      'activeMonitoringDesc': 'A verified driving session is running in the background.',
       'passiveReadinessActive': 'Passive readiness active',
-      'waitingForVehicleMotion': 'Waiting for vehicle motion...',
-      'monitoringPaused': 'Monitoring Paused',
-      'monitoringPausedDesc': 'Background service is stopped.',
-      'speedWarning': 'Slow Down!',
-      'stopBackgroundMonitor': 'Stop Background Monitor',
-      'recentSessions': 'Recent Sessions',
+      'waitingForVehicleMotion': 'Waiting for vehicle movement...',
+      'monitoringPaused': 'Monitoring paused',
+      'monitoringPausedDesc': 'Background monitoring is stopped.',
+      'speedWarning': 'Slow down now',
+      'stopBackgroundMonitor': 'Stop background monitor',
+      'recentSessions': 'Recent sessions',
       'noRecentSessionsFound': 'No recent sessions found.',
-      'limitStatus': 'Speed Limit Status',
+      'limitStatus': 'Speed limit source',
       'settings': 'Settings',
       'history': 'History',
       'language': 'Language',
-      'arabic': 'عربي',
+      'arabic': 'Arabic',
       'english': 'English',
-      'dashboard': 'Speed Alert Dashboard',
-      'viewLiveMonitor': 'View Live Monitor',
-      'manualOverrideStart': 'Manual Override: Start Monitor',
+      'dashboard': 'RoadGuard Dashboard',
+      'viewLiveMonitor': 'View live monitor',
+      'manualOverrideStart': 'Start monitoring now',
       'session': 'Session',
       'alerts': 'Alerts',
       'unknown': 'Unknown',
-      'audioAlerts': 'Audio Alerts',
-      'vibrationAlerts': 'Vibration Alerts',
-      'autoDetect': 'Auto-Detect Driving (Hands-free)',
-      'autoDetectDesc': 'Uses Activity Recognition to start tracking automatically.',
-      'tolerance': 'Overspeed Tolerance (km/h)',
+      'audioAlerts': 'Sound warnings',
+      'vibrationAlerts': 'Vibration warnings',
+      'voiceAlerts': 'Voice warnings',
+      'autoDetect': 'Auto-detect driving',
+      'autoDetectDesc': 'Start tracking automatically when vehicle motion is detected.',
+      'tolerance': 'Overspeed tolerance',
+      'alertDelay': 'Alert delay (seconds)',
+      'alertCooldown': 'Alert cooldown (seconds)',
       'logout': 'Logout',
-      'drivingHistory': 'Driving History',
-      'noHistoryFound': 'No history found.',
+      'drivingHistory': 'Driving history',
+      'noHistoryFound': 'No driving history found.',
       'startedAt': 'Started',
+      'permissionsRequired': 'Permissions required before monitoring can start.',
+      'locationPermissionDeniedForever': 'Location permission is permanently denied. Open settings to continue.',
+      'locationServicesDisabled': 'Location services are disabled. Turn them on to continue.',
+      'openSettings': 'Open settings',
+      'saveChanges': 'Save changes',
+      'settingsSaved': 'Settings saved successfully.',
+      'settingsSaveFailed': 'Failed to save settings.',
+      'loadingSettings': 'Loading settings...',
+      'monitorStartFailed': 'RoadGuard could not start a verified driving session yet. It will retry safely.',
+      'monitorStartPending': 'Trying to start a verified driving session...',
+      'speedLimitUnavailable': 'Speed limit unavailable',
+      'waitingForData': 'Waiting for data...',
+      'warningNotificationTitle': 'Speed warning',
+      'warningNotificationBody': 'Reduce speed now. Limit: {limit} km/h',
+      'monitoringNotificationTitle': 'RoadGuard monitoring',
+      'monitoringNotificationBody': 'Current speed: {speed} km/h',
+      'passiveNotificationTitle': 'RoadGuard ready',
+      'passiveNotificationBody': 'Waiting for vehicle movement...',
+      'inactiveNotificationBody': 'Monitoring paused',
     },
     'ar': {
-      'title': 'تنبيه السرعة',
+      'title': 'رودجارد',
       'login': 'تسجيل الدخول',
       'email': 'البريد الإلكتروني',
       'password': 'كلمة المرور',
       'signIn': 'دخول',
-      'loginFailed': 'فشل تسجيل الدخول. تحقق من بيانات الاعتماد.',
-      'accountDisabled': 'الحساب معطل. اتصل بالمسؤول.',
-      'invalidCredentials': 'البريد الإلكتروني أو كلمة المرور غير صالحة.',
-      'setupRequired': 'يتطلب الإعداد',
-      'setupDesc': 'يرجى تمكين خدمات الموقع ومنح الأذونات.',
+      'loginFailed': 'فشل تسجيل الدخول. يرجى التحقق من البيانات.',
+      'accountDisabled': 'هذا الحساب معطل. يرجى التواصل مع المسؤول.',
+      'invalidCredentials': 'البريد الإلكتروني أو كلمة المرور غير صحيحة.',
+      'adminNotAllowedOnMobile': 'حسابات الإدارة تستخدم لوحة الويب فقط.',
+      'setupRequired': 'يلزم الإعداد',
+      'setupDesc': 'فعّل خدمات الموقع وامنح الأذونات المطلوبة.',
       'activeMonitoring': 'المراقبة النشطة',
-      'activeMonitoringDesc': 'تم اكتشاف حركة المركبة. رحلة آمنة!',
-      'passiveReadinessActive': 'الاستعداد السلبي نشط',
-      'waitingForVehicleMotion': 'في انتظار حركة المركبة...',
-      'monitoringPaused': 'تم إيقاف المراقبة مؤقتاً',
-      'monitoringPausedDesc': 'خدمة الخلفية متوقفة.',
-      'speedWarning': 'أبطئ سرعتك!',
-      'stopBackgroundMonitor': 'إيقاف مراقبة الخلفية',
+      'activeMonitoringDesc': 'توجد جلسة قيادة موثقة تعمل في الخلفية.',
+      'passiveReadinessActive': 'وضع الاستعداد يعمل',
+      'waitingForVehicleMotion': 'بانتظار حركة المركبة...',
+      'monitoringPaused': 'المراقبة متوقفة',
+      'monitoringPausedDesc': 'تم إيقاف المراقبة في الخلفية.',
+      'speedWarning': 'خفف السرعة الآن',
+      'stopBackgroundMonitor': 'إيقاف المراقبة الخلفية',
       'recentSessions': 'الجلسات الأخيرة',
-      'noRecentSessionsFound': 'لم يتم العثور على جلسات أخيرة.',
-      'limitStatus': 'حالة حد السرعة',
+      'noRecentSessionsFound': 'لا توجد جلسات حديثة.',
+      'limitStatus': 'مصدر حد السرعة',
       'settings': 'الإعدادات',
       'history': 'السجل',
       'language': 'اللغة',
-      'arabic': 'عربي',
+      'arabic': 'العربية',
       'english': 'English',
-      'dashboard': 'لوحة تحكم تنبيه السرعة',
+      'dashboard': 'لوحة رودجارد',
       'viewLiveMonitor': 'عرض المراقبة المباشرة',
-      'manualOverrideStart': 'تجاوز يدوي: بدء المراقبة',
+      'manualOverrideStart': 'بدء المراقبة الآن',
       'session': 'جلسة',
       'alerts': 'تنبيهات',
       'unknown': 'غير معروف',
       'audioAlerts': 'تنبيهات صوتية',
-      'vibrationAlerts': 'تنبيهات الاهتزاز',
-      'autoDetect': 'اكتشاف القيادة التلقائي',
-      'autoDetectDesc': 'يستخدم التعرف على النشاط لبدء التتبع تلقائيًا.',
-      'tolerance': 'تسامح السرعة الزائدة (كم/س)',
+      'vibrationAlerts': 'تنبيهات اهتزاز',
+      'voiceAlerts': 'تنبيهات صوتية ناطقة',
+      'autoDetect': 'اكتشاف القيادة تلقائياً',
+      'autoDetectDesc': 'ابدأ التتبع تلقائياً عند اكتشاف حركة المركبة.',
+      'tolerance': 'هامش السرعة الزائدة',
+      'alertDelay': 'تأخير التنبيه (ثوانٍ)',
+      'alertCooldown': 'فاصل التنبيه (ثوانٍ)',
       'logout': 'تسجيل الخروج',
       'drivingHistory': 'سجل القيادة',
-      'noHistoryFound': 'لم يتم العثور على سجل مسبق.',
+      'noHistoryFound': 'لا يوجد سجل قيادة.',
       'startedAt': 'بدأت',
+      'permissionsRequired': 'يلزم منح الأذونات قبل بدء المراقبة.',
+      'locationPermissionDeniedForever': 'تم رفض إذن الموقع نهائياً. افتح الإعدادات للمتابعة.',
+      'locationServicesDisabled': 'خدمات الموقع غير مفعلة. فعّلها للمتابعة.',
+      'openSettings': 'فتح الإعدادات',
+      'saveChanges': 'حفظ التغييرات',
+      'settingsSaved': 'تم حفظ الإعدادات بنجاح.',
+      'settingsSaveFailed': 'تعذر حفظ الإعدادات.',
+      'loadingSettings': 'جارٍ تحميل الإعدادات...',
+      'monitorStartFailed': 'تعذر بدء جلسة قيادة موثقة حالياً. سيعيد التطبيق المحاولة بأمان.',
+      'monitorStartPending': 'جارٍ محاولة بدء جلسة قيادة موثقة...',
+      'speedLimitUnavailable': 'حد السرعة غير متاح',
+      'waitingForData': 'بانتظار البيانات...',
+      'warningNotificationTitle': 'تحذير سرعة',
+      'warningNotificationBody': 'خفف السرعة الآن. الحد: {limit} كم/س',
+      'monitoringNotificationTitle': 'مراقبة رودجارد',
+      'monitoringNotificationBody': 'السرعة الحالية: {speed} كم/س',
+      'passiveNotificationTitle': 'رودجارد جاهز',
+      'passiveNotificationBody': 'بانتظار حركة المركبة...',
+      'inactiveNotificationBody': 'المراقبة متوقفة',
     },
   };
 
-  String translate(String key) {
-    return _localizedValues[locale.languageCode]?[key] ?? key;
+  String translate(String key, {Map<String, String>? params}) {
+    return translateFor(locale.languageCode, key, params: params);
+  }
+
+  static String translateFor(String languageCode, String key, {Map<String, String>? params}) {
+    final language = _localizedValues.containsKey(languageCode) ? languageCode : 'ar';
+    var value = _localizedValues[language]?[key] ?? _localizedValues['ar']?[key] ?? key;
+
+    if (params != null) {
+      for (final entry in params.entries) {
+        value = value.replaceAll('{${entry.key}}', entry.value);
+      }
+    }
+
+    return value;
   }
 }
 
-class _AppLocalizationsDelegate
-    extends LocalizationsDelegate<AppLocalizations> {
+class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {
   const _AppLocalizationsDelegate();
 
   @override
@@ -123,5 +180,5 @@ class _AppLocalizationsDelegate
 }
 
 extension AppLocalizationsExtension on BuildContext {
-  String tr(String key) => AppLocalizations.of(this).translate(key);
+  String tr(String key, {Map<String, String>? params}) => AppLocalizations.of(this).translate(key, params: params);
 }

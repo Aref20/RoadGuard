@@ -1,126 +1,350 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
+using System.Security.Claims;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Moq;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging.Abstractions;
 using SpeedAlert.Api.Controllers;
 using SpeedAlert.Application.Interfaces;
 using SpeedAlert.Application.Models;
+using SpeedAlert.Application.Services;
 using SpeedAlert.Domain.Entities;
+using SpeedAlert.Infrastructure.Persistence;
 using Xunit;
-using Microsoft.EntityFrameworkCore;
-using System.Security.Claims;
-using Microsoft.AspNetCore.Http;
 
 namespace SpeedAlert.Tests;
 
 public class ComprehensiveTests
 {
-    private IAppDbContext GetInMemoryDb()
+    private static AppDbContext CreateDbContext()
     {
-        var options = new DbContextOptionsBuilder<SpeedAlert.Infrastructure.Persistence.AppDbContext>()
-            .UseInMemoryDatabase(databaseName: Guid.NewGuid().ToString())
+        var options = new DbContextOptionsBuilder<AppDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
             .Options;
-            
-        var db = new SpeedAlert.Infrastructure.Persistence.AppDbContext(options);
-        return db;
+
+        return new AppDbContext(options);
     }
 
-    private ClaimsPrincipal GetUserPrincipal(Guid userId)
+    private static ClaimsPrincipal CreateUserPrincipal(Guid userId, string role = "User")
     {
-        return new ClaimsPrincipal(new ClaimsIdentity(new Claim[]
-        {
-            new Claim(ClaimTypes.NameIdentifier, userId.ToString())
-        }, "mock"));
+        return new ClaimsPrincipal(new ClaimsIdentity(
+        [
+            new Claim(ClaimTypes.NameIdentifier, userId.ToString()),
+            new Claim(ClaimTypes.Role, role)
+        ], "test"));
+    }
+
+    private static T GetAnonymousProperty<T>(object instance, string propertyName)
+    {
+        var property = instance.GetType().GetProperty(propertyName);
+        Assert.NotNull(property);
+        return (T)property!.GetValue(instance)!;
     }
 
     [Fact]
-    public async Task SpeedLimitController_ReturnsCached_IfValid()
+    public void AuthController_Register_IsDisabled()
     {
-        // Arrange
-        var db = GetInMemoryDb();
-        var providerMock = new Mock<ISpeedLimitProvider>();
-        var controller = new SpeedLimitController(providerMock.Object, db);
-        
-        db.RoadLookupCaches.Add(new RoadLookupCache
+        using var db = CreateDbContext();
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
         {
-            CacheKey = "1.123,-4.567",
-            SpeedLimitKph = 50,
-            ExpiresAt = DateTime.UtcNow.AddDays(1)
+            ["Jwt:Key"] = "a-very-long-test-key-1234567890",
+            ["Jwt:Issuer"] = "test-issuer",
+            ["Jwt:Audience"] = "test-audience"
+        }).Build();
+
+        var controller = new AuthController(db, configuration);
+        var result = controller.Register(new AuthDto
+        {
+            Email = "user@example.com",
+            Password = "password123"
+        }) as ObjectResult;
+
+        Assert.NotNull(result);
+        Assert.Equal(StatusCodes.Status403Forbidden, result.StatusCode);
+        Assert.Equal("AUTH_SELF_REGISTRATION_DISABLED", GetAnonymousProperty<string>(result.Value!, "code"));
+    }
+
+    [Fact]
+    public async Task AuthController_Login_RejectsInactiveAccounts()
+    {
+        await using var db = CreateDbContext();
+        db.Users.Add(new User
+        {
+            Email = "disabled@example.com",
+            PasswordHash = BCrypt.Net.BCrypt.HashPassword("password123"),
+            Role = "User",
+            IsActive = false,
+            Settings = new UserSettings()
         });
         await db.SaveChangesAsync();
 
-        // Act
-        var result = await controller.Lookup(1.123, -4.567) as OkObjectResult;
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Jwt:Key"] = "a-very-long-test-key-1234567890",
+            ["Jwt:Issuer"] = "test-issuer",
+            ["Jwt:Audience"] = "test-audience"
+        }).Build();
 
-        // Assert
+        var controller = new AuthController(db, configuration);
+        var result = await controller.Login(new AuthDto
+        {
+            Email = "disabled@example.com",
+            Password = "password123"
+        }) as ObjectResult;
+
         Assert.NotNull(result);
-        var val = result.Value;
-        Assert.Equal(50.0, (double)val.GetType().GetProperty("speedLimitKph").GetValue(val, null));
-        Assert.True((bool)val.GetType().GetProperty("isCached").GetValue(val, null));
-        // Ensure provider not called
-        providerMock.Verify(x => x.GetSpeedLimitAsync(It.IsAny<double>(), It.IsAny<double>()), Times.Never);
+        Assert.Equal(StatusCodes.Status403Forbidden, result.StatusCode);
+        Assert.Equal("AUTH_ACCOUNT_DISABLED", GetAnonymousProperty<string>(result.Value!, "code"));
     }
 
     [Fact]
-    public async Task TrackingController_UploadAlert_SavesToDb()
+    public async Task SpeedLimitProviderOrchestrator_UsesFallbackAndProviderAwareCache()
     {
-        // Arrange
-        var db = GetInMemoryDb();
-        var userId = Guid.NewGuid();
-        var sessionId = Guid.NewGuid();
-        
-        db.Sessions.Add(new DrivingSession { Id = sessionId, UserId = userId });
+        await using var db = CreateDbContext();
+        db.ProviderConfigs.AddRange(
+            new ProviderConfig
+            {
+                ProviderKey = SpeedProviderKeys.Google,
+                IsEnabled = true,
+                IsSelected = true,
+                PriorityOrder = 0
+            },
+            new ProviderConfig
+            {
+                ProviderKey = SpeedProviderKeys.Here,
+                IsEnabled = true,
+                IsSelected = false,
+                PriorityOrder = 1
+            });
         await db.SaveChangesAsync();
 
-        var controller = new TrackingController(db);
-        controller.ControllerContext = new ControllerContext
+        var google = new FakeSpeedLimitProvider(
+            SpeedProviderKeys.Google,
+            "Google",
+            (_, _) => SpeedLimitResult.ProviderFailure(SpeedProviderKeys.Google, "google failed"));
+        var here = new FakeSpeedLimitProvider(
+            SpeedProviderKeys.Here,
+            "HERE",
+            (_, _) => new SpeedLimitResult
+            {
+                SpeedLimitKph = 80,
+                Confidence = 0.95,
+                Source = SpeedProviderKeys.Here,
+                Status = SpeedLimitLookupStatuses.Success,
+                RoadName = "Test Road"
+            });
+
+        var orchestrator = new SpeedLimitProviderOrchestrator(
+            [google, here],
+            db,
+            NullLogger<SpeedLimitProviderOrchestrator>.Instance);
+
+        var firstResult = await orchestrator.GetSpeedLimitAsync(31.95, 35.91);
+
+        Assert.Equal(80, firstResult.SpeedLimitKph);
+        Assert.Equal(SpeedProviderKeys.Here, firstResult.ProviderUsed);
+        Assert.True(firstResult.FallbackUsed);
+        Assert.Equal(1, google.CallCount);
+        Assert.Equal(1, here.CallCount);
+
+        var googleConfig = await db.ProviderConfigs.FirstAsync(item => item.ProviderKey == SpeedProviderKeys.Google);
+        var hereConfig = await db.ProviderConfigs.FirstAsync(item => item.ProviderKey == SpeedProviderKeys.Here);
+        googleConfig.IsSelected = false;
+        hereConfig.IsSelected = true;
+        googleConfig.PriorityOrder = 1;
+        hereConfig.PriorityOrder = 0;
+        await db.SaveChangesAsync();
+
+        var secondResult = await orchestrator.GetSpeedLimitAsync(31.95, 35.91);
+
+        Assert.Equal(80, secondResult.SpeedLimitKph);
+        Assert.False(secondResult.IsCached);
+        Assert.Equal(2, here.CallCount);
+    }
+
+    [Fact]
+    public async Task TrackingController_StartSession_ReusesExistingActiveSession()
+    {
+        await using var db = CreateDbContext();
+        var userId = Guid.NewGuid();
+        var sessionId = Guid.NewGuid();
+
+        db.Users.Add(new User
         {
-            HttpContext = new DefaultHttpContext { User = GetUserPrincipal(userId) }
+            Id = userId,
+            Email = "driver@example.com",
+            PasswordHash = BCrypt.Net.BCrypt.HashPassword("password123"),
+            Role = "User",
+            IsActive = true,
+            Settings = new UserSettings { UserId = userId }
+        });
+        db.Sessions.Add(new DrivingSession
+        {
+            Id = sessionId,
+            UserId = userId,
+            Status = "Active",
+            SessionStartReason = "auto_detect"
+        });
+        await db.SaveChangesAsync();
+
+        var controller = new TrackingController(db)
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext { User = CreateUserPrincipal(userId) }
+            }
         };
 
-        var requests = new List<AlertDto>
+        var result = await controller.StartSession(new StartSessionDto
         {
-            new AlertDto { AlertType = "Overspeed", ActualSpeed = 75, SpeedLimit = 60, Timestamp = DateTime.UtcNow }
+            Reason = "manual",
+            IsAuto = false
+        }, CancellationToken.None) as OkObjectResult;
+
+        Assert.NotNull(result);
+        Assert.True(GetAnonymousProperty<bool>(result.Value!, "reusedExisting"));
+        Assert.Equal(sessionId, GetAnonymousProperty<Guid>(result.Value!, "sessionId"));
+    }
+
+    [Fact]
+    public async Task TrackingController_UploadAlerts_UpdatesStatistics()
+    {
+        await using var db = CreateDbContext();
+        var userId = Guid.NewGuid();
+        var sessionId = Guid.NewGuid();
+
+        db.Users.Add(new User
+        {
+            Id = userId,
+            Email = "driver@example.com",
+            PasswordHash = BCrypt.Net.BCrypt.HashPassword("password123"),
+            Role = "User",
+            IsActive = true,
+            Settings = new UserSettings { UserId = userId }
+        });
+        db.Sessions.Add(new DrivingSession
+        {
+            Id = sessionId,
+            UserId = userId,
+            Status = "Active",
+            SessionStartReason = "manual"
+        });
+        await db.SaveChangesAsync();
+
+        var controller = new TrackingController(db)
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext { User = CreateUserPrincipal(userId) }
+            }
         };
 
-        // Act
-        var result = await controller.UploadAlerts(sessionId, requests);
+        var result = await controller.UploadAlerts(sessionId,
+        [
+            new AlertDto
+            {
+                AlertType = "Overspeed",
+                ActualSpeed = 92,
+                SpeedLimit = 80,
+                Timestamp = DateTime.UtcNow
+            }
+        ], CancellationToken.None);
 
-        // Assert
-        Assert.IsType<OkResult>(result);
+        Assert.IsType<OkObjectResult>(result);
         var session = await db.Sessions.FirstAsync();
         Assert.Equal(1, session.AlertEventCount);
         Assert.Equal(1, session.OverspeedEventCount);
-        var alert = await db.AlertEvents.FirstAsync();
-        Assert.Equal(75, alert.ActualSpeedKph);
+        Assert.Equal(12, session.MostSevereOverspeedKph);
     }
 
     [Fact]
-    public async Task TrackingController_EndSession_UpdatesState()
+    public async Task TrackingController_EndSession_CalculatesDistanceFromPoints()
     {
-        var db = GetInMemoryDb();
+        await using var db = CreateDbContext();
         var userId = Guid.NewGuid();
         var sessionId = Guid.NewGuid();
-        
-        db.Sessions.Add(new DrivingSession { Id = sessionId, UserId = userId, Status = "Active" });
+        var startedAt = DateTime.UtcNow.AddMinutes(-5);
+
+        db.Users.Add(new User
+        {
+            Id = userId,
+            Email = "driver@example.com",
+            PasswordHash = BCrypt.Net.BCrypt.HashPassword("password123"),
+            Role = "User",
+            IsActive = true,
+            Settings = new UserSettings { UserId = userId }
+        });
+        db.Sessions.Add(new DrivingSession
+        {
+            Id = sessionId,
+            UserId = userId,
+            Status = "Active",
+            SessionStartReason = "manual",
+            StartedAt = startedAt
+        });
+        db.SessionPoints.AddRange(
+            new SessionPoint
+            {
+                DrivingSessionId = sessionId,
+                Latitude = 31.9500,
+                Longitude = 35.9100,
+                SpeedKph = 60,
+                AccuracyMeters = 10,
+                Timestamp = startedAt
+            },
+            new SessionPoint
+            {
+                DrivingSessionId = sessionId,
+                Latitude = 31.9510,
+                Longitude = 35.9110,
+                SpeedKph = 70,
+                AccuracyMeters = 8,
+                Timestamp = startedAt.AddMinutes(2)
+            });
         await db.SaveChangesAsync();
 
-        var controller = new TrackingController(db);
-        controller.ControllerContext = new ControllerContext
+        var controller = new TrackingController(db)
         {
-            HttpContext = new DefaultHttpContext { User = GetUserPrincipal(userId) }
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext { User = CreateUserPrincipal(userId) }
+            }
         };
 
-        // Act
-        var result = await controller.EndSession(sessionId, new EndSessionDto { Reason = "arrived", DistanceMeters = 5000 });
+        var result = await controller.EndSession(sessionId, new EndSessionDto
+        {
+            Reason = "arrived"
+        }, CancellationToken.None);
 
-        // Assert
-        Assert.IsType<OkResult>(result);
+        Assert.IsType<OkObjectResult>(result);
         var session = await db.Sessions.FirstAsync();
         Assert.Equal("Ended", session.Status);
-        Assert.Equal(5000, session.TotalDistanceMeters);
+        Assert.True(session.TotalDistanceMeters > 0);
+        Assert.Equal(70, session.MaxSpeedKph);
+        Assert.True(session.AverageSpeedKph >= 60);
         Assert.NotNull(session.EndedAt);
+    }
+
+    private sealed class FakeSpeedLimitProvider : ISpeedLimitProvider
+    {
+        private readonly Func<double, double, SpeedLimitResult> _handler;
+
+        public FakeSpeedLimitProvider(string providerKey, string displayName, Func<double, double, SpeedLimitResult> handler)
+        {
+            ProviderKey = providerKey;
+            DisplayName = displayName;
+            _handler = handler;
+        }
+
+        public string ProviderKey { get; }
+        public string DisplayName { get; }
+        public bool IsConfigured => true;
+        public int CallCount { get; private set; }
+
+        public Task<SpeedLimitResult> GetSpeedLimitAsync(double latitude, double longitude, CancellationToken cancellationToken = default)
+        {
+            CallCount++;
+            return Task.FromResult(_handler(latitude, longitude));
+        }
     }
 }
