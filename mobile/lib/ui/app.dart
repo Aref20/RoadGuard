@@ -11,6 +11,17 @@ import 'screens/history_screen.dart';
 class SpeedAlertApp extends StatelessWidget {
   const SpeedAlertApp({Key? key}) : super(key: key);
 
+  ThemeData _buildTheme(String langCode, Brightness brightness) {
+    return ThemeData(
+      colorScheme: ColorScheme.fromSeed(
+        seedColor: Colors.blueAccent,
+        brightness: brightness,
+      ),
+      useMaterial3: true,
+      fontFamily: langCode == 'ar' ? 'Cairo' : null,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final box = Hive.box('settings');
@@ -34,15 +45,8 @@ class SpeedAlertApp extends StatelessWidget {
             GlobalWidgetsLocalizations.delegate,
             GlobalCupertinoLocalizations.delegate,
           ],
-          theme: ThemeData(
-            colorScheme: ColorScheme.fromSeed(seedColor: Colors.blueAccent),
-            useMaterial3: true,
-            fontFamily: langCode == 'ar' ? 'Cairo' : null,
-          ),
-          darkTheme: ThemeData.dark(useMaterial3: true).copyWith(
-            colorScheme: ColorScheme.fromSeed(seedColor: Colors.blueAccent, brightness: Brightness.dark),
-            fontFamily: langCode == 'ar' ? 'Cairo' : null,
-          ),
+          theme: _buildTheme(langCode, Brightness.light),
+          darkTheme: _buildTheme(langCode, Brightness.dark),
           themeMode: ThemeMode.system,
           initialRoute: hasToken ? '/' : '/login',
           routes: {
