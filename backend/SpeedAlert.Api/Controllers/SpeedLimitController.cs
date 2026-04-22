@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SpeedAlert.Application.Interfaces;
 using SpeedAlert.Application.Models;
+using SpeedAlert.Application.Services;
 using SpeedAlert.Domain.Entities;
 using System;
 using System.Threading.Tasks;
@@ -14,12 +15,12 @@ namespace SpeedAlert.Api.Controllers;
 [Authorize]
 public class SpeedLimitController : ControllerBase
 {
-    private readonly ISpeedLimitProvider _speedLimitProvider;
+    private readonly ISpeedLimitProviderOrchestrator _orchestrator;
     private readonly IAppDbContext _db;
 
-    public SpeedLimitController(ISpeedLimitProvider speedLimitProvider, IAppDbContext db)
+    public SpeedLimitController(ISpeedLimitProviderOrchestrator orchestrator, IAppDbContext db)
     {
-        _speedLimitProvider = speedLimitProvider;
+        _orchestrator = orchestrator;
         _db = db;
     }
 
@@ -41,13 +42,16 @@ public class SpeedLimitController : ControllerBase
                 speedLimitKph = cacheEntry.SpeedLimitKph,
                 source = "PostgreSQL Cache",
                 confidence = 1.0,
+                providerUsed = (string?)null,
+                fallbackUsed = false,
+                roadName = cacheEntry.RoadName,
                 isCached = true
             });
         }
 
-        var result = await _speedLimitProvider.GetSpeedLimitAsync(lat, lng);
+        var result = await _orchestrator.GetSpeedLimitAsync(lat, lng);
         
-        if (result.Source != "Unknown" && result.Source != "ApiErrorFallback" && result.Source != "OfflineFallback")
+        if (result.SpeedLimitKph > 0 && result.Confidence > 0)
         {
             if (cacheEntry == null)
             {
@@ -71,10 +75,14 @@ public class SpeedLimitController : ControllerBase
 
         return Ok(new 
         {
-            speedLimitKph = result.SpeedLimitKph,
+            speedLimitKph = result.SpeedLimitKph < 0 ? null : (double?)result.SpeedLimitKph,
             source = result.Source,
             confidence = result.Confidence,
-            isCached = false
+            providerUsed = result.ProviderUsed,
+            fallbackUsed = result.FallbackUsed,
+            roadName = result.RoadName,
+            isCached = false,
+            message = result.Message
         });
     }
 }

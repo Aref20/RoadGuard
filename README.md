@@ -39,9 +39,9 @@ flutter run
 ```
 
 ### Built-in Admin
-An admin user is seeded directly on startup via Entity Framework migrations. Use these credentials to log in to the Next.js Dashboard:
-- Email: `admin@speedalert.com`
-- Password: `AdminSecure123!`
+An admin user is seeded directly on startup *only if explicitly configured*. Do NOT use default credentials in production. Configure your environment variables to set the admin seeding credentials:
+- Email configuration: `Admin:Email`
+- Password configuration: `Admin:Password`
 
 ## Deployment (Railway)
 
@@ -49,9 +49,18 @@ The environment is configured specifically for platforms like Railway.
 1. Connect this GitHub repository.
 2. Under "Add Service", choose "Database" -> provision a **PostgreSQL** node.
 3. Under "Add Service", deploy the backend API by selecting the repository and linking the `./backend` directory. 
-   - Define Env Variables: `ConnectionStrings__DefaultConnection` (value = your PostgreSQL connection string).
-   - Define: `Jwt__Key` (e.g. `SuperSecretSecureKey123!`).
+   - Define strict Env Variables to ensure the container starts:
+     - `ConnectionStrings__DefaultConnection` (value = your PostgreSQL connection string).
+     - `Jwt__Key` (e.g. your high-entropy secure key, >32 chars).
+     - `Jwt__Issuer` and `Jwt__Audience` (optional, default strings used otherwise).
+     - `Admin__Email` and `Admin__Password` (required to boot and securely seed).
+     - `SpeedProvider__ApiKey` (Required to use Google Roads, otherwise defaults to offline -1 limit).
+     - `AllowedOrigins__0` (e.g. `https://your-nextjs-app.railway.app` required for secure CORS & SignalR).
+     - `RUN_MIGRATIONS=true` (Required to run EF setup and seed admin during init).
 4. Under "Add Service", deploy the `./` root directory for the Next.js frontend, ensuring the environment variable `NEXT_PUBLIC_API_URL` points to your backend Railway domain.
+
+## Mobile Application Setup
+- Ensure the Mobile application base API URL is properly set via Environment flags or updated in `api_client.dart` if compiling for Production.
 
 ## Platform Testing & Verification
 

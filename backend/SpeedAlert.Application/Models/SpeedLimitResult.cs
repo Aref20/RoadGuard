@@ -6,4 +6,9 @@ public class SpeedLimitResult
     public string RoadName { get; set; } = "Unknown";
     public string Source { get; set; } = "Unknown";
     public double Confidence { get; set; } = 1.0;
+    
+    public string? ProviderUsed { get; set; }
+    public bool FallbackUsed { get; set; } = false;
+    public string? Message { get; set; }
+    public bool IsCached { get; set; } = false;
 }

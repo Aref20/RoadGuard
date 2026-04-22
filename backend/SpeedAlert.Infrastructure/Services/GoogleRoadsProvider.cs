@@ -1,6 +1,7 @@
 using SpeedAlert.Application.Interfaces;
 using SpeedAlert.Application.Models;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using System.Net.Http;
 using System.Text.Json;
 using System.Threading.Tasks;
@@ -12,11 +13,13 @@ public class GoogleRoadsProvider : ISpeedLimitProvider
 {
     private readonly HttpClient _http;
     private readonly IConfiguration _config;
+    private readonly ILogger<GoogleRoadsProvider> _logger;
     
-    public GoogleRoadsProvider(IConfiguration config)
+    public GoogleRoadsProvider(HttpClient http, IConfiguration config, ILogger<GoogleRoadsProvider> logger)
     {
-        _http = new HttpClient();
+        _http = http;
         _config = config;
+        _logger = logger;
     }
 
     public async Task<SpeedLimitResult> GetSpeedLimitAsync(double latitude, double longitude)
@@ -24,7 +27,8 @@ public class GoogleRoadsProvider : ISpeedLimitProvider
         var apiKey = _config["SpeedProvider:ApiKey"];
         if (string.IsNullOrEmpty(apiKey))
         {
-            return new SpeedLimitResult { SpeedLimitKph = 50, Source = "OfflineFallback", Confidence = 0.5 };
+            _logger.LogWarning("SpeedProvider:ApiKey is missing in configuration. Using OfflineFallback (-1).");
+            return new SpeedLimitResult { SpeedLimitKph = -1, Source = "OfflineFallback", Confidence = 0.5 };
         }
         
         try 
@@ -35,7 +39,8 @@ public class GoogleRoadsProvider : ISpeedLimitProvider
             var response = await _http.GetAsync(url);
             if (!response.IsSuccessStatusCode) 
             {
-                return new SpeedLimitResult { SpeedLimitKph = 50, Source = "ApiErrorFallback", Confidence = 0.3 };
+                _logger.LogWarning("SpeedProvider API returned non-success status code {StatusCode}. Using ApiErrorFallback (-1).", response.StatusCode);
+                return new SpeedLimitResult { SpeedLimitKph = -1, Source = "ApiErrorFallback", Confidence = 0.3 };
             }
 
             var content = await response.Content.ReadAsStringAsync();
@@ -57,11 +62,11 @@ public class GoogleRoadsProvider : ISpeedLimitProvider
                 };
             }
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            // Log in production
+            _logger.LogError(ex, "SpeedProvider API threw an exception during limit lookup. Using Unknown (-1).");
         }
 
-        return new SpeedLimitResult { SpeedLimitKph = 50, Source = "Unknown", Confidence = 0.0 };
+        return new SpeedLimitResult { SpeedLimitKph = -1, Source = "Unknown", Confidence = 0.0 };
     }
 }

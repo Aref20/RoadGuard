@@ -34,6 +34,11 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _checkStatus() async {
     bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
     LocationPermission permission = await Geolocator.checkPermission();
+    
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+    }
+    
     bool running = await FlutterBackgroundService().isRunning();
     
     if (mounted) {

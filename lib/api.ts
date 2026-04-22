@@ -59,5 +59,18 @@ export const api = {
     const res = await fetchWithAuth('/admin/sessions');
     if (!res.ok) throw new Error('Failed to fetch sessions');
     return res.json();
+  },
+  getProviderSettings: async () => {
+    const res = await fetchWithAuth('/admin/provider-settings');
+    if (!res.ok) throw new Error('Failed to fetch provider settings');
+    return res.json();
+  },
+  updateProviderSettings: async (payload: any) => {
+    const res = await fetchWithAuth('/admin/provider-settings', {
+      method: 'PUT',
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) throw new Error('Failed to update provider settings');
+    return res.json();
   }
 };

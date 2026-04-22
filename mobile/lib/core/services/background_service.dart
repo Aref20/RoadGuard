@@ -50,8 +50,13 @@ class BackgroundMonitoringService {
   static void onStart(ServiceInstance service) async {
     DartPluginRegistrant.ensureInitialized();
     
+    StreamSubscription<Position>? positionStream;
+    Timer? heartbeatTimer;
+
     // Listen for stops
-    service.on('stopService').listen((event) {
+    service.on('stopService').listen((event) async {
+      positionStream?.cancel();
+      heartbeatTimer?.cancel();
       service.stopSelf();
     });
 
@@ -80,8 +85,9 @@ class BackgroundMonitoringService {
     String? currentSessionId;
     DateTime lastMotionTime = DateTime.now();
     bool wasAlerting = false; // For edge detection
+    List<Map<String, dynamic>> _offlinePointQueue = [];
 
-    StreamSubscription<Position> positionStream = Geolocator.getPositionStream(locationSettings: locationSettings).listen(
+    positionStream = Geolocator.getPositionStream(locationSettings: locationSettings).listen(
       (Position position) async {
         final apiClient = ApiClient();
         double speedKph = position.speed * 3.6;
@@ -98,9 +104,10 @@ class BackgroundMonitoringService {
                 });
                 if (response.statusCode == 200) {
                    currentSessionId = response.data['sessionId'];
+                   _offlinePointQueue.clear();
                 }
              } catch (e) {
-                // If offline, we could queue locally. For now, fail gracefully.
+                // Cannot start session right now, will try next tick if speed sustains
              }
           }
         } else {
@@ -115,6 +122,7 @@ class BackgroundMonitoringService {
                   });
                 } catch(e) {}
                 currentSessionId = null;
+                _offlinePointQueue.clear();
              }
           }
         }
@@ -136,21 +144,34 @@ class BackgroundMonitoringService {
 
         if (currentSpeedLimit > 0) {
            overspeedEngine.processNewLocation(position, currentSpeedLimit);
+        } else {
+           overspeedEngine.reset();
         }
 
         // Upload Points periodically or continuously if driving
         if (isDriving && currentSessionId != null) {
+           var pointData = {
+              'timestamp': DateTime.now().toIso8601String(),
+              'lat': position.latitude,
+              'lng': position.longitude,
+              'speed': speedKph,
+              'accuracy': position.accuracy
+           };
+           
+           _offlinePointQueue.add(pointData);
+           
+           // Attempt flush
            try {
-             await apiClient.dio.post('/sessions/$currentSessionId/points', data: [
-               {
-                 'timestamp': DateTime.now().toIso8601String(),
-                 'lat': position.latitude,
-                 'lng': position.longitude,
-                 'speed': speedKph,
-                 'accuracy': position.accuracy
-               }
-             ]);
-           } catch (e) {}
+             // Only upload max 50 points to prevent huge payload
+             var payload = _offlinePointQueue.take(50).toList();
+             await apiClient.dio.post('/sessions/$currentSessionId/points', data: payload);
+             _offlinePointQueue.removeWhere((p) => payload.contains(p));
+           } catch (e) {
+             // Leave in queue
+             if (_offlinePointQueue.length > 500) {
+               _offlinePointQueue.removeRange(0, _offlinePointQueue.length - 500); // cap size at 500
+             }
+           }
         }
 
         // Handle Alerts
@@ -201,7 +222,7 @@ class BackgroundMonitoringService {
     );
 
     // Periodic heartbeat
-    Timer.periodic(const Duration(minutes: 1), (timer) async {
+    heartbeatTimer = Timer.periodic(const Duration(minutes: 1), (timer) async {
       if (service is AndroidServiceInstance) {
         if (!(await service.isForegroundService())) {
           service.stopSelf();

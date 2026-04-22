@@ -7,10 +7,10 @@ using Microsoft.IdentityModel.Tokens;
 using Microsoft.Extensions.Configuration;
 using SpeedAlert.Application.Interfaces;
 using SpeedAlert.Domain.Entities;
-using BCrypt.Net;
 using System.Threading.Tasks;
-using System.Linq;
 using System;
+using System.ComponentModel.DataAnnotations;
+using System.Linq;
 
 namespace SpeedAlert.Api.Controllers;
 
@@ -30,13 +30,20 @@ public class AuthController : ControllerBase
     [HttpPost("register")]
     public async Task<IActionResult> Register([FromBody] AuthDto request)
     {
-        if (await _db.Users.AnyAsync(u => u.Email == request.Email))
-            return BadRequest(new { message = "Email inside use" });
+        if (!ModelState.IsValid)
+            return BadRequest(ModelState);
+
+        var normalizedEmail = request.Email.Trim().ToLowerInvariant();
+
+        if (await _db.Users.AnyAsync(u => u.Email == normalizedEmail))
+            return BadRequest(new { message = "Email already in use" });
             
         var user = new User
         {
-            Email = request.Email,
-            PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.Password)
+            Email = normalizedEmail,
+            PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.Password),
+            Role = "User",
+            IsActive = true
         };
         
         user.Settings = new UserSettings { UserId = user.Id };
@@ -50,7 +57,12 @@ public class AuthController : ControllerBase
     [HttpPost("login")]
     public async Task<IActionResult> Login([FromBody] AuthDto request)
     {
-        var user = await _db.Users.FirstOrDefaultAsync(u => u.Email == request.Email);
+        if (!ModelState.IsValid)
+            return BadRequest(ModelState);
+
+        var normalizedEmail = request.Email.Trim().ToLowerInvariant();
+
+        var user = await _db.Users.FirstOrDefaultAsync(u => u.Email == normalizedEmail);
         if (user == null || !BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
             return Unauthorized(new { message = "Invalid credentials" });
             
@@ -59,19 +71,25 @@ public class AuthController : ControllerBase
 
     private string GenerateJwt(User user)
     {
-        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_config["Jwt:Key"]!));
+        var keyString = _config["Jwt:Key"];
+        if (string.IsNullOrWhiteSpace(keyString)) 
+        {
+            throw new InvalidOperationException("Jwt:Key is missing or empty.");
+        }
+
+        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(keyString));
         var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
         
         var claims = new[]
         {
             new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
             new Claim(ClaimTypes.Email, user.Email),
-            new Claim(ClaimTypes.Role, user.Role)
+            new Claim(ClaimTypes.Role, user.Role ?? "User")
         };
         
         var token = new JwtSecurityToken(
-            issuer: _config["Jwt:Issuer"],
-            audience: _config["Jwt:Audience"],
+            issuer: _config["Jwt:Issuer"] ?? "speedalert-api",
+            audience: _config["Jwt:Audience"] ?? "speedalert-mobile",
             claims: claims,
             expires: DateTime.UtcNow.AddDays(7),
             signingCredentials: creds
@@ -81,4 +99,13 @@ public class AuthController : ControllerBase
     }
 }
 
-public class AuthDto { public string Email { get; set; } = null!; public string Password { get; set; } = null!; }
+public class AuthDto 
+{ 
+    [Required]
+    [EmailAddress]
+    public string Email { get; set; } = null!; 
+
+    [Required]
+    [MinLength(8, ErrorMessage = "Password must be at least 8 characters")]
+    public string Password { get; set; } = null!; 
+}

@@ -105,3 +105,12 @@ public class RoadLookupCache
     public DateTime RetrievedAt { get; set; } = DateTime.UtcNow;
     public DateTime ExpiresAt { get; set; }
 }
+
+public class ProviderConfig
+{
+    public string ProviderKey { get; set; } = null!; // e.g. "Google", "Here", "TomTom"
+    public bool IsEnabled { get; set; } = true;
+    public int PriorityOrder { get; set; } = 0;
+    public bool IsSelected { get; set; } = false;
+    public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+}

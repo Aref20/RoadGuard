@@ -15,12 +15,18 @@ using SpeedAlert.Infrastructure.Persistence;
 using SpeedAlert.Domain.Entities;
 using System.Linq;
 using System.Threading.Tasks;
+using SpeedAlert.Api.Hubs;
+using SpeedAlert.Api.Services;
+using SpeedAlert.Application.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Configure Serilog
+// Configure Serilog (Console + Rolling File)
 Log.Logger = new LoggerConfiguration()
+    .MinimumLevel.Information()
+    .Enrich.FromLogContext()
     .WriteTo.Console()
+    .WriteTo.File("logs/speedalert-.txt", rollingInterval: RollingInterval.Day)
     .CreateLogger();
 builder.Host.UseSerilog();
 
@@ -29,15 +35,58 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddHealthChecks();
+builder.Services.AddSignalR();
+builder.Services.AddHostedService<TelemetryBroadcastService>();
+
+// CORS Config
+var allowedOrigins = builder.Configuration.GetSection("AllowedOrigins").Get<string[]>() ?? Array.Empty<string>();
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("SecureCorsPolicy", policy =>
+    {
+        if (allowedOrigins.Any())
+        {
+            policy.WithOrigins(allowedOrigins)
+                  .AllowAnyMethod()
+                  .AllowAnyHeader()
+                  .AllowCredentials(); // SignalR requires credentials
+        }
+        else
+        {
+            // Fallback for strictness if not set (or could be localhost for dev)
+            policy.WithOrigins("http://localhost:3000", "http://localhost:3001") // Example dev origins
+                  .AllowAnyMethod()
+                  .AllowAnyHeader()
+                  .AllowCredentials();
+        }
+    });
+});
 
 // Use Clean Architecture Infrastructure Injection
 builder.Services.AddInfrastructure(builder.Configuration);
 
-// Domain / Application layer registrations (Overspeed engine doesn't need constructor injection but we can register it)
+// Domain / Application layer registrations
 builder.Services.AddScoped<SpeedAlert.Domain.Services.OverspeedValidationEngine>();
+builder.Services.AddScoped<ISpeedLimitProviderOrchestrator, SpeedLimitProviderOrchestrator>();
+
+// Strict Secret Management
+var jwtKey = builder.Configuration["Jwt:Key"];
+if (string.IsNullOrWhiteSpace(jwtKey))
+{
+    throw new InvalidOperationException("CRITICAL STARTUP ERROR: Missing required configuration 'Jwt:Key'!");
+}
+var adminEmail = builder.Configuration["Admin:Email"];
+if (string.IsNullOrWhiteSpace(adminEmail))
+{
+    throw new InvalidOperationException("CRITICAL STARTUP ERROR: Missing required configuration 'Admin:Email'!");
+}
+var adminPassword = builder.Configuration["Admin:Password"];
+if (string.IsNullOrWhiteSpace(adminPassword))
+{
+    throw new InvalidOperationException("CRITICAL STARTUP ERROR: Missing required configuration 'Admin:Password'!");
+}
 
 // JWT Authentication
-var jwtKey = builder.Configuration["Jwt:Key"] ?? "Generate_A_Random_Secure_String_Min_32_Chars!";
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(opts =>
     {
@@ -51,53 +100,75 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidAudience = builder.Configuration["Jwt:Audience"] ?? "speedalert-mobile",
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey))
         };
+        // SignalR token mapping from query string
+        opts.Events = new JwtBearerEvents
+        {
+            OnMessageReceived = context =>
+            {
+                var accessToken = context.Request.Query["access_token"];
+                var path = context.HttpContext.Request.Path;
+                if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/hub/telemetry"))
+                {
+                    context.Token = accessToken;
+                }
+                return Task.CompletedTask;
+            }
+        };
     });
 builder.Services.AddAuthorization();
 
 var app = builder.Build();
 
-// Migrate DB and Seed Admin User on startup (Railway friendly)
-using (var scope = app.Services.CreateScope())
+// Safe Database Migrations & Seeding
+var runMigrations = Environment.GetEnvironmentVariable("RUN_MIGRATIONS") == "true" || args.Contains("--migrate");
+if (runMigrations)
 {
-    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    try
+    using (var scope = app.Services.CreateScope())
     {
-        Log.Information("Applying migrations...");
-        db.Database.Migrate();
-
-        // Seed Admin Data
-        var adminEmail = builder.Configuration["Admin:Email"] ?? "admin@speedalert.com";
-        var adminPassword = builder.Configuration["Admin:Password"] ?? "AdminSecure123!";
-
-        if (!db.Users.Any(u => u.Email == adminEmail))
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        try
         {
-            Log.Information($"Seeding default admin user: {adminEmail}");
-            var adminUser = new User
+            Log.Information("Applying migrations explicitly as requested...");
+            db.Database.Migrate();
+
+            if (!db.Users.Any(u => u.Email == adminEmail))
             {
-                Email = adminEmail,
-                PasswordHash = BCrypt.Net.BCrypt.HashPassword(adminPassword),
-                Role = "Admin", // Crucial for [Authorize(Roles = "Admin")]
-                IsActive = true
-            };
-            
-            adminUser.Settings = new UserSettings { UserId = adminUser.Id };
-            
-            db.Users.Add(adminUser);
-            db.SaveChanges();
-            Log.Information("Admin user seeded successfully.");
+                Log.Information($"Seeding default admin user: {adminEmail}");
+                var adminUser = new User
+                {
+                    Email = adminEmail,
+                    PasswordHash = BCrypt.Net.BCrypt.HashPassword(adminPassword),
+                    Role = "Admin",
+                    IsActive = true
+                };
+                
+                adminUser.Settings = new UserSettings { UserId = adminUser.Id };
+                
+                db.Users.Add(adminUser);
+                db.SaveChanges();
+                Log.Information("Admin user seeded successfully.");
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Fatal(ex, "Failed to migrate or seed database on explicit request!");
+            throw; // Fail fast if requested but fails
         }
     }
-    catch (Exception ex)
-    {
-        Log.Error(ex, "Failed to migrate or seed database on startup");
-    }
+}
+else
+{
+    Log.Information("Skipping automatic database migrations (Run with --migrate or RUN_MIGRATIONS=true to execute)");
 }
 
-app.UseSwagger();
-app.UseSwaggerUI();
+if (app.Environment.IsDevelopment())
+{
+    app.UseSwagger();
+    app.UseSwaggerUI();
+}
 
 app.UseForwardedHeaders();
-app.UseCors(x => x.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader());
+app.UseCors("SecureCorsPolicy");
 
 app.UseAuthentication();
 app.UseAuthorization();
@@ -105,5 +176,6 @@ app.UseAuthorization();
 app.MapControllers();
 app.MapHealthChecks("/health");
 app.MapHealthChecks("/ready");
+app.MapHub<TelemetryHub>("/hub/telemetry");
 
 app.Run();

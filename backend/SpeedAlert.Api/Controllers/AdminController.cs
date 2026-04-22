@@ -76,4 +76,79 @@ public class AdminController : ControllerBase
             DatabaseStatus = dbHealthy ? "Healthy" : "Disconnected"
         });
     }
+
+    [HttpGet("provider-settings")]
+    public async Task<IActionResult> GetProviderSettings()
+    {
+        var configs = await _db.ProviderConfigs.OrderBy(p => p.PriorityOrder).ToListAsync();
+        
+        // Seed default providers if missed by migration
+        var defaultProviders = new[] { "GoogleRoads", "Here", "TomTom" };
+        bool addedNew = false;
+        foreach (var pKey in defaultProviders)
+        {
+            if (!configs.Any(c => c.ProviderKey == pKey))
+            {
+                var newConfig = new SpeedAlert.Domain.Entities.ProviderConfig
+                {
+                    ProviderKey = pKey,
+                    IsEnabled = true,
+                    IsSelected = pKey == "GoogleRoads",
+                    PriorityOrder = pKey == "GoogleRoads" ? 0 : 1,
+                    UpdatedAt = System.DateTime.UtcNow
+                };
+                _db.ProviderConfigs.Add(newConfig);
+                configs.Add(newConfig);
+                addedNew = true;
+            }
+        }
+        
+        if (addedNew)
+        {
+            await _db.SaveChangesAsync();
+        }
+
+        return Ok(configs.Select(c => new
+        {
+            c.ProviderKey,
+            DisplayName = c.ProviderKey,
+            c.IsEnabled,
+            c.IsSelected,
+            c.PriorityOrder,
+            c.UpdatedAt
+        }));
+    }
+
+    [HttpPut("provider-settings")]
+    public async Task<IActionResult> UpdateProviderSettings([FromBody] System.Collections.Generic.List<ProviderConfigUpdateDto> payload)
+    {
+        var configs = await _db.ProviderConfigs.ToListAsync();
+        
+        // Ensure only one is selected
+        var selectedCount = payload.Count(p => p.IsSelected);
+        if (selectedCount > 1) return BadRequest("Only one provider can be selected");
+
+        foreach (var update in payload)
+        {
+            var conf = configs.FirstOrDefault(c => c.ProviderKey == update.ProviderKey);
+            if (conf != null)
+            {
+                conf.IsEnabled = update.IsEnabled;
+                conf.IsSelected = update.IsSelected;
+                conf.PriorityOrder = update.PriorityOrder;
+                conf.UpdatedAt = System.DateTime.UtcNow;
+            }
+        }
+
+        await _db.SaveChangesAsync();
+        return Ok(new { message = "Provider settings updated successfully" });
+    }
+}
+
+public class ProviderConfigUpdateDto
+{
+    public string ProviderKey { get; set; } = null!;
+    public bool IsEnabled { get; set; }
+    public bool IsSelected { get; set; }
+    public int PriorityOrder { get; set; }
 }

@@ -15,11 +15,15 @@ public class AppDbContext : DbContext, IAppDbContext
     public DbSet<AlertEvent> AlertEvents => Set<AlertEvent>();
     public DbSet<RoadLookupCache> RoadLookupCaches => Set<RoadLookupCache>();
     public DbSet<DeviceStatus> DeviceStatuses => Set<DeviceStatus>();
+    public DbSet<ProviderConfig> ProviderConfigs => Set<ProviderConfig>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
         
+        modelBuilder.Entity<ProviderConfig>()
+            .HasKey(p => p.ProviderKey);
+
         modelBuilder.Entity<User>()
             .HasIndex(u => u.Email)
             .IsUnique();

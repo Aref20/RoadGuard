@@ -14,5 +14,6 @@ public interface IAppDbContext
     DbSet<AlertEvent> AlertEvents { get; }
     DbSet<RoadLookupCache> RoadLookupCaches { get; }
     DbSet<DeviceStatus> DeviceStatuses { get; }
+    DbSet<ProviderConfig> ProviderConfigs { get; }
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }

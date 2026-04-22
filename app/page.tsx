@@ -1,14 +1,16 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'motion/react';
 import { 
   Car, Activity, ShieldAlert, Users, Database, 
   Server, MapPin, AlertTriangle, Settings, Bell, 
-  Search, LayoutDashboard, History, LogOut
+  Search, LayoutDashboard, History, LogOut, CheckCircle2,
+  Save
 } from 'lucide-react';
 import { api, getAuthToken, removeAuthToken } from '@/lib/api';
+import * as signalR from '@microsoft/signalr';
 
 type SystemHealth = {
   totalUsers: number;
@@ -35,13 +37,26 @@ type Session = {
   wasAutoStarted: boolean;
 };
 
+type ProviderConfig = {
+  providerKey: string;
+  displayName: string;
+  isEnabled: boolean;
+  isSelected: boolean;
+  priorityOrder: number;
+  updatedAt: string;
+};
+
 export default function AdminDashboard() {
   const router = useRouter();
+  const [currentView, setCurrentView] = useState<'dashboard' | 'settings'>('dashboard');
   const [health, setHealth] = useState<SystemHealth | null>(null);
   const [users, setUsers] = useState<User[]>([]);
   const [sessions, setSessions] = useState<Session[]>([]);
+  const [providers, setProviders] = useState<ProviderConfig[]>([]);
   const [isBackendConnected, setIsBackendConnected] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(true);
+  const [savingSettings, setSavingSettings] = useState(false);
+  const connectionRef = useRef<signalR.HubConnection | null>(null);
 
   const performLogout = () => {
     removeAuthToken();
@@ -49,18 +64,19 @@ export default function AdminDashboard() {
   };
 
   useEffect(() => {
-    // Auth Check
-    if (!getAuthToken()) {
+    const token = getAuthToken();
+    if (!token) {
       router.push('/login');
       return;
     }
 
-    const fetchData = async () => {
+    const fetchInitialData = async () => {
       try {
-        const [healthData, usersData, sessionsData] = await Promise.all([
+        const [healthData, usersData, sessionsData, providersData] = await Promise.all([
           api.getHealth(),
           api.getUsers(),
-          api.getSessions()
+          api.getSessions(),
+          api.getProviderSettings().catch(() => []) // Fallback if API hasn't updated yet
         ]);
         
         setHealth({
@@ -75,6 +91,7 @@ export default function AdminDashboard() {
         });
         setUsers(usersData);
         setSessions(sessionsData);
+        setProviders(providersData);
         setIsBackendConnected(true);
       } catch (err) {
         setIsBackendConnected(false);
@@ -82,11 +99,97 @@ export default function AdminDashboard() {
         setLoading(false);
       }
     };
-    
-    fetchData();
-    const interval = setInterval(fetchData, 10000); // Poll every 10s
-    return () => clearInterval(interval);
+
+    fetchInitialData();
+
+    const connection = new signalR.HubConnectionBuilder()
+      .withUrl(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'}/hub/telemetry`, {
+        accessTokenFactory: () => token
+      })
+      .withAutomaticReconnect([0, 2000, 5000, 10000, 30000])
+      .build();
+
+    connectionRef.current = connection;
+
+    connection.on('ReceiveHealth', (data) => {
+      setHealth({
+           totalUsers: data.totalUsers || data.TotalUsers || 0,
+           totalSessions: data.totalSessions || data.TotalSessions || 0,
+           activeSessions: data.activeSessions || data.ActiveSessions || 0,
+           autoStartedSessions: data.autoStartedSessions || data.AutoStartedSessions || 0,
+           totalViolations: data.totalViolations || data.TotalViolations || 0,
+           totalAlerts: data.totalAlerts || data.TotalAlerts || 0,
+           databaseStatus: data.databaseStatus || data.DatabaseStatus,
+           serverTime: data.serverTime || data.ServerTime
+      });
+      setIsBackendConnected(true);
+    });
+
+    connection.on('ReceiveUsers', (data) => setUsers(data));
+    connection.on('ReceiveSessions', (data) => setSessions(data));
+    connection.onclose(() => setIsBackendConnected(false));
+    connection.onreconnecting(() => setIsBackendConnected(false));
+    connection.onreconnected(() => setIsBackendConnected(true));
+
+    const startConnection = async () => {
+        try {
+            await connection.start();
+        } catch (err) {
+            console.error('SignalR Connection Error: ', err);
+            setIsBackendConnected(false);
+        }
+    };
+
+    startConnection();
+
+    return () => {
+      connection.stop();
+    };
   }, [router]);
+
+  const saveProviderSettings = async () => {
+    setSavingSettings(true);
+    try {
+      await api.updateProviderSettings(providers);
+      alert('Settings saved successfully!');
+    } catch (err) {
+      alert('Failed to save settings');
+    } finally {
+      setSavingSettings(false);
+    }
+  };
+
+  const handleProviderToggle = (key: string) => {
+    setProviders(prev => prev.map(p => {
+      if (p.providerKey === key) return { ...p, isEnabled: !p.isEnabled };
+      return p;
+    }));
+  };
+
+  const handleProviderSelect = (key: string) => {
+    setProviders(prev => prev.map(p => ({
+      ...p,
+      isSelected: p.providerKey === key
+    })));
+  };
+
+  const moveProvider = (key: string, direction: 'up' | 'down') => {
+    setProviders(prev => {
+      const idx = prev.findIndex(p => p.providerKey === key);
+      if (idx === -1) return prev;
+      if (direction === 'up' && idx === 0) return prev;
+      if (direction === 'down' && idx === prev.length - 1) return prev;
+
+      const newArr = [...prev];
+      const targetIdx = direction === 'up' ? idx - 1 : idx + 1;
+      
+      const temp = newArr[idx];
+      newArr[idx] = newArr[targetIdx];
+      newArr[targetIdx] = temp;
+      
+      return newArr.map((p, i) => ({ ...p, priorityOrder: i }));
+    });
+  };
 
   if (loading) {
     return (
@@ -107,7 +210,18 @@ export default function AdminDashboard() {
         </div>
         
         <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
-          <NavItem icon={<LayoutDashboard size={20}/>} label="Dashboard" active />
+          <NavItem 
+            icon={<LayoutDashboard size={20}/>} 
+            label="Dashboard" 
+            active={currentView === 'dashboard'} 
+            onClick={() => setCurrentView('dashboard')} 
+          />
+          <NavItem 
+            icon={<Settings size={20}/>} 
+            label="Provider Settings" 
+            active={currentView === 'settings'} 
+            onClick={() => setCurrentView('settings')}
+          />
         </nav>
         
         <div className="p-4 border-t border-slate-800">
@@ -151,171 +265,275 @@ export default function AdminDashboard() {
             >
               <AlertTriangle className="text-red-500 mr-3 mt-0.5 whitespace-nowrap" size={20} />
               <div>
-                <h4 className="text-red-500 font-medium text-sm">Backend API Offline</h4>
+                <h4 className="text-red-500 font-medium text-sm">WebSocket Disconnected / Backend API Offline</h4>
                 <p className="text-red-500/70 text-xs mt-1">
-                  The Web UI is fully functional and attempting to fetch from <code className="bg-red-500/20 px-1 py-0.5 rounded">http://localhost:8080/api</code>. 
-                  However, the C# .NET Backend and PostgreSQL databases are unavailable. Please export the project and run <code>docker-compose up</code> to see live data.
+                  The Web UI is fully functional but unable to establish a WebSocket stream to <code className="bg-red-500/20 px-1 py-0.5 rounded">{process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'}</code>. 
+                  Please ensure the Service is running and accepting connections.
                 </p>
               </div>
             </motion.div>
           )}
 
-          <div className="flex items-center justify-between mb-8">
-            <div>
-              <h1 className="text-3xl font-bold tracking-tight text-white mb-1">Overview</h1>
-              <p className="text-slate-400 text-sm">Real-time telemetry and violation tracking.</p>
-            </div>
-            <div className="text-right">
-              <div className="flex items-center justify-end text-xs text-slate-500 mb-1">
-                <Database size={12} className="mr-1.5" />
-                Database: <span className={health?.databaseStatus === 'Healthy' ? 'text-emerald-400 ml-1' : 'text-red-400 ml-1'}>
-                  {health?.databaseStatus || 'Unknown'}
-                </span>
+          {currentView === 'dashboard' ? (
+            <>
+              <div className="flex items-center justify-between mb-8">
+                <div>
+                  <h1 className="text-3xl font-bold tracking-tight text-white mb-1">Overview</h1>
+                  <p className="text-slate-400 text-sm">Real-time telemetry and violation tracking.</p>
+                </div>
+                <div className="text-right">
+                  <div className="flex items-center justify-end text-xs text-slate-500 mb-1">
+                    <Database size={12} className="mr-1.5" />
+                    Database: <span className={health?.databaseStatus === 'Healthy' ? 'text-emerald-400 ml-1' : 'text-red-400 ml-1'}>
+                      {health?.databaseStatus || 'Unknown'}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-end text-xs text-slate-500">
+                    <Server size={12} className="mr-1.5" />
+                    Server Time: {health?.serverTime ? new Date(health.serverTime).toLocaleTimeString() : 'Offline'}
+                  </div>
+                </div>
               </div>
-              <div className="flex items-center justify-end text-xs text-slate-500">
-                <Server size={12} className="mr-1.5" />
-                Server Time: {health?.serverTime ? new Date(health.serverTime).toLocaleTimeString() : 'Offline'}
-              </div>
-            </div>
-          </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-            <MetricCard 
-              title="Registered Drivers" 
-              value={health?.totalUsers?.toLocaleString() || '0'} 
-              icon={<Users size={22} className="text-blue-500" />} 
-              trend={isBackendConnected ? "Live Query" : "Offline"}
-            />
-            <MetricCard 
-              title="Active Sessions" 
-              value={health?.activeSessions?.toString() || '0'} 
-              icon={<Activity size={22} className="text-emerald-500" />} 
-              trend={isBackendConnected ? `${health?.totalSessions || 0} Total Sessions` : "Offline"}
-            />
-            <MetricCard 
-              title="Total Violations" 
-              value={health?.totalViolations?.toLocaleString() || '0'} 
-              icon={<ShieldAlert size={22} className="text-orange-500" />} 
-              trend={isBackendConnected ? "Recorded Events" : "Offline"}
-            />
-            <MetricCard 
-              title="Total Alerts Triggered" 
-              value={health?.totalAlerts?.toLocaleString() || '0'} 
-              icon={<Bell size={22} className="text-red-500" />} 
-              trend={isBackendConnected ? "Audio/Haptic Warns" : "Offline"}
-            />
-          </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                <MetricCard 
+                  title="Registered Drivers" 
+                  value={health?.totalUsers?.toLocaleString() || '0'} 
+                  icon={<Users size={22} className="text-blue-500" />} 
+                  trend={isBackendConnected ? "Live Socket" : "Offline"}
+                />
+                <MetricCard 
+                  title="Active Sessions" 
+                  value={health?.activeSessions?.toString() || '0'} 
+                  icon={<Activity size={22} className="text-emerald-500" />} 
+                  trend={isBackendConnected ? `${health?.totalSessions || 0} Total Sessions` : "Offline"}
+                />
+                <MetricCard 
+                  title="Total Violations" 
+                  value={health?.totalViolations?.toLocaleString() || '0'} 
+                  icon={<ShieldAlert size={22} className="text-orange-500" />} 
+                  trend={isBackendConnected ? "Recorded Events" : "Offline"}
+                />
+                <MetricCard 
+                  title="Total Alerts Triggered" 
+                  value={health?.totalAlerts?.toLocaleString() || '0'} 
+                  icon={<Bell size={22} className="text-red-500" />} 
+                  trend={isBackendConnected ? "Audio/Haptic Warns" : "Offline"}
+                />
+              </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            
-            {/* Live Sessions Table */}
-            <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden flex flex-col">
-              <div className="px-6 py-5 border-b border-slate-800 flex justify-between items-center bg-slate-900/50">
-                <h3 className="font-semibold text-slate-100 flex items-center">
-                  <div className={`w-2.5 h-2.5 rounded-full mr-3 ${isBackendConnected ? 'bg-emerald-500 animate-pulse' : 'bg-slate-600'}`}></div>
-                  Live Driving Sessions
-                </h3>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                
+                {/* Live Sessions Table */}
+                <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden flex flex-col">
+                  <div className="px-6 py-5 border-b border-slate-800 flex justify-between items-center bg-slate-900/50">
+                    <h3 className="font-semibold text-slate-100 flex items-center">
+                      <div className={`w-2.5 h-2.5 rounded-full mr-3 ${isBackendConnected ? 'bg-emerald-500 animate-pulse' : 'bg-slate-600'}`}></div>
+                      Live Driving Sessions
+                    </h3>
+                  </div>
+                  <div className="overflow-x-auto min-h-[200px]">
+                    <table className="w-full text-left text-sm whitespace-nowrap">
+                      <thead>
+                        <tr className="text-slate-500 bg-slate-950/30">
+                          <th className="px-6 py-3 font-medium">Session ID</th>
+                          <th className="px-6 py-3 font-medium">Started At</th>
+                          <th className="px-6 py-3 font-medium text-center">Trigger</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800/50">
+                        {sessions.length === 0 && (
+                          <tr>
+                            <td colSpan={3} className="px-6 py-8 text-center text-slate-500">
+                              {isBackendConnected ? "No active driving sessions." : "Connect to backend to view sessions."}
+                            </td>
+                          </tr>
+                        )}
+                        {sessions.map((s, idx) => (
+                          <motion.tr 
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: idx * 0.1 }}
+                            key={s.id} 
+                            className="hover:bg-slate-800/50 transition-colors"
+                          >
+                            <td className="px-6 py-4 font-medium text-slate-300 font-mono text-xs">{s.id.split('-')[0]}</td>
+                            <td className="px-6 py-4 text-slate-400">{new Date(s.startedAt).toLocaleString()}</td>
+                            <td className="px-6 py-4 text-center">
+                              {s.wasAutoStarted ? (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-500/10 text-blue-400">Auto-Detected</span>
+                              ) : (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-slate-500/10 text-slate-400">Manual</span>
+                              )}
+                            </td>
+                          </motion.tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Users Roster */}
+                <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden flex flex-col">
+                  <div className="px-6 py-5 border-b border-slate-800 flex justify-between items-center bg-slate-900/50">
+                    <h3 className="font-semibold text-slate-100 flex items-center">
+                      <Users size={18} className="text-blue-500 mr-2" />
+                      Driver Roster
+                    </h3>
+                  </div>
+                  <div className="overflow-x-auto min-h-[200px]">
+                    <table className="w-full text-left text-sm whitespace-nowrap">
+                      <thead>
+                        <tr className="text-slate-500 bg-slate-950/30">
+                          <th className="px-6 py-3 font-medium">Email</th>
+                          <th className="px-6 py-3 font-medium">Registered</th>
+                          <th className="px-6 py-3 font-medium text-center">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800/50">
+                        {users.length === 0 && (
+                          <tr>
+                            <td colSpan={3} className="px-6 py-8 text-center text-slate-500">
+                              {isBackendConnected ? "No users registered." : "Connect to backend to view users."}
+                            </td>
+                          </tr>
+                        )}
+                        {users.map((u, idx) => (
+                          <motion.tr 
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: idx * 0.1 }}
+                            key={u.id} 
+                            className="hover:bg-slate-800/50 transition-colors"
+                          >
+                            <td className="px-6 py-4 text-slate-300">{u.email}</td>
+                            <td className="px-6 py-4 text-slate-400">{new Date(u.createdAt).toLocaleDateString()}</td>
+                            <td className="px-6 py-4 text-center">
+                              {u.isActive ? (
+                                <span className="inline-flex w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+                              ) : (
+                                <span className="inline-flex w-2.5 h-2.5 rounded-full bg-red-500"></span>
+                              )}
+                            </td>
+                          </motion.tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
               </div>
-              <div className="overflow-x-auto min-h-[200px]">
-                <table className="w-full text-left text-sm whitespace-nowrap">
-                  <thead>
-                    <tr className="text-slate-500 bg-slate-950/30">
-                      <th className="px-6 py-3 font-medium">Session ID</th>
-                      <th className="px-6 py-3 font-medium">Started At</th>
-                      <th className="px-6 py-3 font-medium text-center">Trigger</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800/50">
-                    {sessions.length === 0 && (
-                      <tr>
-                        <td colSpan={3} className="px-6 py-8 text-center text-slate-500">
-                          {isBackendConnected ? "No active driving sessions." : "Connect to backend to view sessions."}
-                        </td>
-                      </tr>
-                    )}
-                    {sessions.map((s, idx) => (
-                      <motion.tr 
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: idx * 0.1 }}
-                        key={s.id} 
-                        className="hover:bg-slate-800/50 transition-colors"
-                      >
-                        <td className="px-6 py-4 font-medium text-slate-300 font-mono text-xs">{s.id.split('-')[0]}</td>
-                        <td className="px-6 py-4 text-slate-400">{new Date(s.startedAt).toLocaleString()}</td>
-                        <td className="px-6 py-4 text-center">
-                          {s.wasAutoStarted ? (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-500/10 text-blue-400">Auto-Detected</span>
-                          ) : (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-slate-500/10 text-slate-400">Manual</span>
-                          )}
-                        </td>
-                      </motion.tr>
-                    ))}
-                  </tbody>
-                </table>
+            </>
+          ) : (
+            <div className="max-w-4xl mx-auto mt-4">
+              <div className="flex items-center justify-between mb-8">
+                <div>
+                  <h1 className="text-3xl font-bold tracking-tight text-white mb-1">Speed Providers</h1>
+                  <p className="text-slate-400 text-sm">Configure primary and fallback providers for speed limit checks.</p>
+                </div>
+                <button
+                  onClick={saveProviderSettings}
+                  disabled={savingSettings}
+                  className="flex items-center px-4 py-2 bg-red-600 hover:bg-red-500 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <Save size={16} className="mr-2" />
+                  {savingSettings ? 'Saving...' : 'Save Settings'}
+                </button>
               </div>
+
+              <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden mb-8">
+                <div className="px-6 py-5 border-b border-slate-800 bg-slate-900/50 text-sm font-medium text-slate-300">
+                  Select Primary Provider
+                </div>
+                <div className="p-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {providers.map(p => (
+                    <div 
+                      key={p.providerKey}
+                      onClick={() => handleProviderSelect(p.providerKey)}
+                      className={`cursor-pointer rounded-xl border p-4 flex flex-col items-center justify-center text-center transition-all ${
+                        p.isSelected 
+                          ? 'border-red-500 bg-red-500/10' 
+                          : 'border-slate-700 bg-slate-800 hover:border-slate-500'
+                      }`}
+                    >
+                      {p.isSelected && <CheckCircle2 className="text-red-500 mb-2" size={24} />}
+                      {!p.isSelected && <div className="w-6 h-6 mb-2 rounded-full border-2 border-slate-600"></div>}
+                      <span className="font-medium text-slate-100">{p.displayName}</span>
+                      <span className="text-xs text-slate-400 mt-1">{p.providerKey} API</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+                <div className="px-6 py-5 border-b border-slate-800 bg-slate-900/50 flex justify-between items-center">
+                  <span className="text-sm font-medium text-slate-300">Fallback Strategy (Priority Order)</span>
+                  <span className="text-xs text-slate-500">Drag not implemented, use arrows</span>
+                </div>
+                <div className="p-6">
+                  {providers.length > 0 ? (
+                    <div className="space-y-3">
+                      {providers.sort((a,b) => a.priorityOrder - b.priorityOrder).map((p, idx) => (
+                        <div key={p.providerKey} className="flex items-center justify-between p-4 rounded-lg border border-slate-800 bg-slate-950/50">
+                          <div className="flex items-center space-x-4">
+                            <span className="text-slate-500 font-mono text-xs w-4">{idx + 1}.</span>
+                            <span className="font-medium text-slate-300">{p.displayName}</span>
+                            {p.isSelected && <span className="px-2 py-0.5 rounded text-[10px] uppercase font-bold bg-slate-800 text-slate-400">Primary</span>}
+                          </div>
+                          
+                          <div className="flex items-center space-x-4">
+                            <label className="flex items-center cursor-pointer">
+                              <span className="text-xs text-slate-500 mr-2">{p.isEnabled ? 'Enabled' : 'Disabled'}</span>
+                              <div className="relative">
+                                <input 
+                                  type="checkbox" 
+                                  className="sr-only" 
+                                  checked={p.isEnabled}
+                                  onChange={() => handleProviderToggle(p.providerKey)}
+                                />
+                                <div className={`block w-10 h-6 rounded-full transition-colors ${p.isEnabled ? 'bg-red-500' : 'bg-slate-700'}`}></div>
+                                <div className={`dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform ${p.isEnabled ? 'transform translate-x-4' : ''}`}></div>
+                              </div>
+                            </label>
+                            
+                            <div className="flex flex-col space-y-1 ml-4 border-l border-slate-800 pl-4">
+                              <button 
+                                onClick={() => moveProvider(p.providerKey, 'up')}
+                                disabled={idx === 0}
+                                className="text-slate-500 hover:text-slate-300 disabled:opacity-30"
+                              >
+                                ▲
+                              </button>
+                              <button 
+                                onClick={() => moveProvider(p.providerKey, 'down')}
+                                disabled={idx === providers.length - 1}
+                                className="text-slate-500 hover:text-slate-300 disabled:opacity-30"
+                              >
+                                ▼
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-8 text-slate-500 text-sm">No providers found.</div>
+                  )}
+                </div>
+              </div>
+
             </div>
-
-            {/* Users Roster */}
-            <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden flex flex-col">
-              <div className="px-6 py-5 border-b border-slate-800 flex justify-between items-center bg-slate-900/50">
-                <h3 className="font-semibold text-slate-100 flex items-center">
-                  <Users size={18} className="text-blue-500 mr-2" />
-                  Driver Roster
-                </h3>
-              </div>
-              <div className="overflow-x-auto min-h-[200px]">
-                <table className="w-full text-left text-sm whitespace-nowrap">
-                  <thead>
-                    <tr className="text-slate-500 bg-slate-950/30">
-                      <th className="px-6 py-3 font-medium">Email</th>
-                      <th className="px-6 py-3 font-medium">Registered</th>
-                      <th className="px-6 py-3 font-medium text-center">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800/50">
-                    {users.length === 0 && (
-                      <tr>
-                        <td colSpan={3} className="px-6 py-8 text-center text-slate-500">
-                          {isBackendConnected ? "No users registered." : "Connect to backend to view users."}
-                        </td>
-                      </tr>
-                    )}
-                    {users.map((u, idx) => (
-                      <motion.tr 
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: idx * 0.1 }}
-                        key={u.id} 
-                        className="hover:bg-slate-800/50 transition-colors"
-                      >
-                        <td className="px-6 py-4 text-slate-300">{u.email}</td>
-                        <td className="px-6 py-4 text-slate-400">{new Date(u.createdAt).toLocaleDateString()}</td>
-                        <td className="px-6 py-4 text-center">
-                          {u.isActive ? (
-                            <span className="inline-flex w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
-                          ) : (
-                            <span className="inline-flex w-2.5 h-2.5 rounded-full bg-red-500"></span>
-                          )}
-                        </td>
-                      </motion.tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-          </div>
+          )}
         </div>
       </main>
     </div>
   );
 }
 
-function NavItem({ icon, label, active = false }: { icon: React.ReactNode, label: string, active?: boolean }) {
+function NavItem({ icon, label, active = false, onClick }: { icon: React.ReactNode, label: string, active?: boolean, onClick?: () => void }) {
   return (
     <button 
+      onClick={onClick}
       className={`flex items-center w-full px-3 py-2.5 rounded-lg transition-colors text-sm font-medium ${
         active 
           ? 'bg-red-500/10 text-red-500' 
@@ -329,6 +547,7 @@ function NavItem({ icon, label, active = false }: { icon: React.ReactNode, label
 }
 
 function MetricCard({ title, value, icon, trend }: { title: string, value: string, icon: React.ReactNode, trend: string }) {
+  // ... original MetricCard logic
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 relative overflow-hidden group">
       <div className="absolute top-0 right-0 p-6 opacity-20 transform translate-x-2 -translate-y-2 group-hover:scale-110 transition-transform duration-300">

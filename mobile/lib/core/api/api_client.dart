@@ -11,7 +11,7 @@ class ApiClient {
 
   ApiClient._internal() {
     _dio = Dio(BaseOptions(
-      baseUrl: 'http://localhost:8080/api', // Replaced with env var in actual build
+      baseUrl: const String.fromEnvironment('API_BASE_URL', defaultValue: 'http://10.0.2.2:8080/api'),
       connectTimeout: const Duration(seconds: 10),
       receiveTimeout: const Duration(seconds: 10),
     ));

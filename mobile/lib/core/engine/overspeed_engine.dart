@@ -40,6 +40,14 @@ class OverspeedEngine {
     }
   }
 
+  void reset() {
+    _recentPoints.clear();
+    _overspeedStartTime = null;
+    if (_isCurrentlyAlerting) {
+      _stopAlert();
+    }
+  }
+
   void _triggerAlert() {
     _isCurrentlyAlerting = true;
     // Notify streams / fire sound & vibration
