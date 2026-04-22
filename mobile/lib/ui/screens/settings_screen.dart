@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/api/api_client.dart';
+import '../../core/config/app_config.dart';
 import 'package:hive/hive.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -68,6 +69,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
             onTap: () {
               setState(() => _tolerance = _tolerance == 5 ? 10 : 5);
             },
+          ),
+          const Divider(),
+          ListTile(
+            title: const Text('Connected Server'),
+            subtitle: Text(AppConfig.apiBaseUrl),
+            leading: const Icon(Icons.cloud_done_outlined),
+          ),
+          ListTile(
+            title: const Text('Environment'),
+            subtitle: Text(AppConfig.environment),
+            leading: const Icon(Icons.settings_ethernet),
           ),
           const Divider(),
           ListTile(

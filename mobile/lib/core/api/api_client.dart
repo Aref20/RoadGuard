@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import '../config/app_config.dart';
 
 class ApiClient {
   static final ApiClient _instance = ApiClient._internal();
@@ -11,7 +12,7 @@ class ApiClient {
 
   ApiClient._internal() {
     _dio = Dio(BaseOptions(
-      baseUrl: const String.fromEnvironment('API_BASE_URL', defaultValue: 'http://10.0.2.2:8080/api'),
+      baseUrl: AppConfig.apiBaseUrl,
       connectTimeout: const Duration(seconds: 10),
       receiveTimeout: const Duration(seconds: 10),
     ));

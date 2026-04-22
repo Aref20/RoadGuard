@@ -14,6 +14,21 @@ ENVIRONMENT=development
 ```
 *(In production, use `--dart-define` to inject these values).*
 
+For Railway-backed mobile builds, pass your deployed backend domain when running or building the app:
+```bash
+flutter run --dart-define=ENVIRONMENT=production --dart-define=API_BASE_URL=https://YOUR-BACKEND.up.railway.app/api
+```
+
+If you prefer to pass the root Railway domain, the app will automatically normalize it to `/api`:
+```bash
+flutter run --dart-define=ENVIRONMENT=production --dart-define=API_BASE_URL=https://YOUR-BACKEND.up.railway.app
+```
+
+For release builds:
+```bash
+flutter build apk --dart-define=ENVIRONMENT=production --dart-define=API_BASE_URL=https://YOUR-BACKEND.up.railway.app/api
+```
+
 ## Permissions Configuration
 ### Android (`android/app/src/main/AndroidManifest.xml`)
 The system requires these permission tags to effectively run Activity Recognition and Location Services:

@@ -60,7 +60,9 @@ The environment is configured specifically for platforms like Railway.
 4. Under "Add Service", deploy the `./` root directory for the Next.js frontend, ensuring the environment variable `NEXT_PUBLIC_API_URL` points to your backend Railway domain.
 
 ## Mobile Application Setup
-- Ensure the Mobile application base API URL is properly set via Environment flags or updated in `api_client.dart` if compiling for Production.
+- Ensure the mobile application base API URL is set to your Railway backend when running on a real phone:
+  - `flutter run --dart-define=ENVIRONMENT=production --dart-define=API_BASE_URL=https://YOUR-BACKEND.up.railway.app/api`
+  - The mobile app also shows the active server URL in Settings so you can verify it is pointed at Railway.
 
 ## Platform Testing & Verification
 
