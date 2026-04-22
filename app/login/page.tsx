@@ -90,7 +90,7 @@ export default function LoginPage() {
         </form>
         
         <div className="mt-6 text-center text-xs text-slate-500">
-          Backend API expects <code className="bg-slate-800 px-1 py-0.5 rounded text-slate-400">http://localhost:8080</code>
+          Connected API endpoint: <code className="bg-slate-800 px-1 py-0.5 rounded text-slate-400">{API_BASE_URL}</code>
         </div>
       </div>
     </div>

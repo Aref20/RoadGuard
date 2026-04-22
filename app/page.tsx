@@ -2,14 +2,14 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { motion } from 'motion/react';
+import { motion } from 'framer-motion';
 import { 
   Car, Activity, ShieldAlert, Users, Database, 
   Server, MapPin, AlertTriangle, Settings, Bell, 
   Search, LayoutDashboard, History, LogOut, CheckCircle2,
   Save
 } from 'lucide-react';
-import { api, getAuthToken, removeAuthToken } from '@/lib/api';
+import { API_BASE_URL, API_ORIGIN, api, getAuthToken, removeAuthToken } from '@/lib/api';
 import * as signalR from '@microsoft/signalr';
 
 type SystemHealth = {
@@ -103,7 +103,7 @@ export default function AdminDashboard() {
     fetchInitialData();
 
     const connection = new signalR.HubConnectionBuilder()
-      .withUrl(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'}/hub/telemetry`, {
+      .withUrl(`${API_ORIGIN}/hub/telemetry`, {
         accessTokenFactory: () => token
       })
       .withAutomaticReconnect([0, 2000, 5000, 10000, 30000])
@@ -267,8 +267,8 @@ export default function AdminDashboard() {
               <div>
                 <h4 className="text-red-500 font-medium text-sm">WebSocket Disconnected / Backend API Offline</h4>
                 <p className="text-red-500/70 text-xs mt-1">
-                  The Web UI is fully functional but unable to establish a WebSocket stream to <code className="bg-red-500/20 px-1 py-0.5 rounded">{process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'}</code>. 
-                  Please ensure the Service is running and accepting connections.
+                  The dashboard is attempting to fetch from <code className="bg-red-500/20 px-1 py-0.5 rounded">{API_BASE_URL}</code> and stream updates from <code className="bg-red-500/20 px-1 py-0.5 rounded">{`${API_ORIGIN}/hub/telemetry`}</code>.
+                  The Railway API is currently unavailable, so live dashboard data cannot be loaded.
                 </p>
               </div>
             </motion.div>
