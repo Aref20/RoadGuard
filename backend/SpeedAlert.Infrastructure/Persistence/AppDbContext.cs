@@ -1,3 +1,4 @@
+using System;
 using Microsoft.EntityFrameworkCore;
 using SpeedAlert.Application.Interfaces;
 using SpeedAlert.Domain.Entities;
@@ -16,6 +17,7 @@ public class AppDbContext : DbContext, IAppDbContext
     public DbSet<RoadLookupCache> RoadLookupCaches => Set<RoadLookupCache>();
     public DbSet<DeviceStatus> DeviceStatuses => Set<DeviceStatus>();
     public DbSet<ProviderConfig> ProviderConfigs => Set<ProviderConfig>();
+    public DbSet<ProviderRuntimeSettings> ProviderRuntimeSettings => Set<ProviderRuntimeSettings>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -23,6 +25,9 @@ public class AppDbContext : DbContext, IAppDbContext
         
         modelBuilder.Entity<ProviderConfig>()
             .HasKey(p => p.ProviderKey);
+
+        modelBuilder.Entity<ProviderRuntimeSettings>()
+            .HasKey(p => p.Id);
 
         modelBuilder.Entity<User>()
             .HasIndex(u => u.Email)
@@ -39,5 +44,13 @@ public class AppDbContext : DbContext, IAppDbContext
         modelBuilder.Entity<RoadLookupCache>()
             .HasIndex(r => r.CacheKey)
             .IsUnique();
+
+        modelBuilder.Entity<ProviderRuntimeSettings>()
+            .HasData(new ProviderRuntimeSettings
+            {
+                Id = 1,
+                FallbackEnabled = true,
+                UpdatedAt = DateTime.UtcNow
+            });
     }
 }
