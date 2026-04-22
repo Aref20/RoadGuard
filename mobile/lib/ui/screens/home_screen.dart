@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import '../../core/api/api_client.dart';
+import '../../l10n/app_localizations.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({Key? key}) : super(key: key);
@@ -66,7 +67,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Speed Alert Dashboard'),
+        title: Text(context.tr('dashboard')),
         actions: [
           IconButton(
             icon: const Icon(Icons.history),
@@ -98,7 +99,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 }
               },
               icon: Icon(_isMonitorRunning ? Icons.speed : Icons.play_arrow),
-              label: Text(_isMonitorRunning ? 'View Live Monitor' : 'Manual Override: Start Monitor'),
+              label: Text(_isMonitorRunning ? context.tr('viewLiveMonitor') : context.tr('manualOverrideStart')),
               style: ElevatedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 backgroundColor: _isMonitorRunning ? Colors.blue : null,
@@ -107,10 +108,10 @@ class _HomeScreenState extends State<HomeScreen> {
             if (_isMonitorRunning)
               TextButton(
                 onPressed: _toggleService,
-                child: const Text('Stop Background Monitor', style: TextStyle(color: Colors.red)),
+                child: Text(context.tr('stopBackgroundMonitor'), style: const TextStyle(color: Colors.red)),
               ),
             const SizedBox(height: 12),
-            const Text('Recent Sessions', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            Text(context.tr('recentSessions'), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             Expanded(
               child: FutureBuilder(
                 future: ApiClient().dio.get('/sessions'),
@@ -119,7 +120,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     return const Center(child: CircularProgressIndicator());
                   }
                   if (snapshot.hasError || !snapshot.hasData || snapshot.data.data.isEmpty) {
-                    return const Center(child: Text('No recent sessions found.'));
+                    return Center(child: Text(context.tr('noRecentSessionsFound')));
                   }
                   
                   final sessions = snapshot.data.data as List;
@@ -129,9 +130,9 @@ class _HomeScreenState extends State<HomeScreen> {
                       final s = sessions[index];
                       return ListTile(
                         leading: Icon(s['wasAutoStarted'] == true ? Icons.settings_remote : Icons.car_rental),
-                        title: Text('Session ${s['id'].toString().substring(0,8)}'),
-                        subtitle: Text(s['startedAt'] ?? 'Unknown'),
-                        trailing: Text('${s['alertEventCount'] ?? 0} Alerts', style: TextStyle(color: (s['alertEventCount'] ?? 0) > 0 ? Colors.red : Colors.green)),
+                        title: Text('${context.tr('session')} ${s['id'].toString().substring(0,8)}'),
+                        subtitle: Text(s['startedAt'] ?? context.tr('unknown')),
+                        trailing: Text('${s['alertEventCount'] ?? 0} ${context.tr('alerts')}', style: TextStyle(color: (s['alertEventCount'] ?? 0) > 0 ? Colors.red : Colors.green)),
                       );
                     }
                   );
@@ -155,23 +156,23 @@ class _HomeScreenState extends State<HomeScreen> {
     if (!isReady) {
        icon = Icons.error;
        color = Colors.red;
-       title = 'Setup Required';
-       subtitle = 'Please enable location services and grant permissions.';
+       title = context.tr('setupRequired');
+       subtitle = context.tr('setupDesc');
     } else if (_isDriving) {
        icon = Icons.directions_car;
        color = Colors.blue;
-       title = 'Active Monitoring';
-       subtitle = 'Vehicle motion detected. Safe travels!';
+       title = context.tr('activeMonitoring');
+       subtitle = context.tr('activeMonitoringDesc');
     } else if (_isMonitorRunning) {
        icon = Icons.check_circle;
        color = Colors.green;
-       title = 'Passive Readiness Active';
-       subtitle = 'Waiting for vehicle motion...';
+       title = context.tr('passiveReadinessActive');
+       subtitle = context.tr('waitingForVehicleMotion');
     } else {
        icon = Icons.pause_circle;
        color = Colors.orange;
-       title = 'Monitoring Paused';
-       subtitle = 'Background service is stopped.';
+       title = context.tr('monitoringPaused');
+       subtitle = context.tr('monitoringPausedDesc');
     }
 
     return Card(

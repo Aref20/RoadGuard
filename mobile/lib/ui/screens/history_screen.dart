@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/api/api_client.dart';
+import '../../l10n/app_localizations.dart';
 
 class HistoryScreen extends StatefulWidget {
   const HistoryScreen({Key? key}) : super(key: key);
@@ -34,19 +35,19 @@ class _HistoryScreenState extends State<HistoryScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Driving History')),
+      appBar: AppBar(title: Text(context.tr('drivingHistory'))),
       body: _isLoading 
         ? const Center(child: CircularProgressIndicator())
         : _sessions.isEmpty
-          ? const Center(child: Text('No driving sessions recorded yet.'))
+          ? Center(child: Text(context.tr('noHistoryFound')))
           : ListView.builder(
               itemCount: _sessions.length,
               itemBuilder: (context, index) {
                 final session = _sessions[index];
                 return ListTile(
                   leading: Icon(session['wasAutoStarted'] ? Icons.settings_remote : Icons.play_arrow),
-                  title: Text('Session: ${session['id'].toString().substring(0,8)}'),
-                  subtitle: Text('Started: ${session['startedAt']}'),
+                  title: Text('${context.tr('session')}: ${session['id'].toString().substring(0,8)}'),
+                  subtitle: Text('${context.tr('startedAt')}: ${session['startedAt']}'),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () {
                     // Navigate to detail view

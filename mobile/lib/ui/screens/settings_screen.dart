@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../core/api/api_client.dart';
 import '../../core/config/app_config.dart';
 import 'package:hive/hive.dart';
+import '../../l10n/app_localizations.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({Key? key}) : super(key: key);
@@ -44,27 +45,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Settings')),
+      appBar: AppBar(title: Text(context.tr('settings'))),
       body: ListView(
         children: [
           SwitchListTile(
-            title: const Text('Audio Alerts'),
+            title: Text(context.tr('audioAlerts')),
             value: _audioAlerts,
             onChanged: (v) => setState(() => _audioAlerts = v),
           ),
           SwitchListTile(
-            title: const Text('Vibration Alerts'),
+            title: Text(context.tr('vibrationAlerts')),
             value: _hapticAlerts,
             onChanged: (v) => setState(() => _hapticAlerts = v),
           ),
           SwitchListTile(
-            title: const Text('Auto-Detect Driving (Hands-free)'),
-            subtitle: const Text('Uses Activity Recognition to start tracking automatically.'),
+            title: Text(context.tr('autoDetect')),
+            subtitle: Text(context.tr('autoDetectDesc')),
             value: _autoDetect,
             onChanged: (v) => setState(() => _autoDetect = v),
           ),
           ListTile(
-            title: const Text('Overspeed Tolerance (km/h)'),
+            title: Text(context.tr('tolerance')),
             trailing: Text('+$_tolerance', style: const TextStyle(fontSize: 18)),
             onTap: () {
               setState(() => _tolerance = _tolerance == 5 ? 10 : 5);
