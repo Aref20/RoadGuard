@@ -2659,6 +2659,7 @@
           "FluentValidation.AspNetCore": "11.3.0",
           "Microsoft.AspNetCore.Authentication.JwtBearer": "8.0.0",
           "Serilog.AspNetCore": "8.0.0",
+          "Serilog.Sinks.File": "5.0.0",
           "SpeedAlert.Application": "1.0.0",
           "SpeedAlert.Infrastructure": "1.0.0",
           "Swashbuckle.AspNetCore": "6.5.0"
@@ -8186,38 +8187,45 @@
     ]
   },
   "packageFolders": {
-    "/root/.nuget/packages/": {}
+    "C:\\Users\\LENOVO\\.nuget\\packages\\": {},
+    "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages": {}
   },
   "project": {
     "version": "1.0.0",
     "restore": {
-      "projectUniqueName": "/app/applet/backend/SpeedAlert.Tests/SpeedAlert.Tests.csproj",
+      "projectUniqueName": "C:\\Users\\LENOVO\\Desktop\\RoadGuard\\backend\\SpeedAlert.Tests\\SpeedAlert.Tests.csproj",
       "projectName": "SpeedAlert.Tests",
-      "projectPath": "/app/applet/backend/SpeedAlert.Tests/SpeedAlert.Tests.csproj",
-      "packagesPath": "/root/.nuget/packages/",
-      "outputPath": "/app/applet/backend/SpeedAlert.Tests/obj/",
+      "projectPath": "C:\\Users\\LENOVO\\Desktop\\RoadGuard\\backend\\SpeedAlert.Tests\\SpeedAlert.Tests.csproj",
+      "packagesPath": "C:\\Users\\LENOVO\\.nuget\\packages\\",
+      "outputPath": "C:\\Users\\LENOVO\\Desktop\\RoadGuard\\backend\\SpeedAlert.Tests\\obj\\",
       "projectStyle": "PackageReference",
+      "fallbackFolders": [
+        "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
+      ],
       "configFilePaths": [
-        "/root/.nuget/NuGet/NuGet.Config"
+        "C:\\Users\\LENOVO\\AppData\\Roaming\\NuGet\\NuGet.Config",
+        "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.FallbackLocation.config",
+        "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
       ],
       "originalTargetFrameworks": [
         "net8.0"
       ],
       "sources": {
+        "C:\\Program Files (x86)\\Microsoft SDKs\\NuGetPackages\\": {},
         "https://api.nuget.org/v3/index.json": {}
       },
       "frameworks": {
         "net8.0": {
           "targetAlias": "net8.0",
           "projectReferences": {
-            "/app/applet/backend/SpeedAlert.Api/SpeedAlert.Api.csproj": {
-              "projectPath": "/app/applet/backend/SpeedAlert.Api/SpeedAlert.Api.csproj"
+            "C:\\Users\\LENOVO\\Desktop\\RoadGuard\\backend\\SpeedAlert.Api\\SpeedAlert.Api.csproj": {
+              "projectPath": "C:\\Users\\LENOVO\\Desktop\\RoadGuard\\backend\\SpeedAlert.Api\\SpeedAlert.Api.csproj"
             },
-            "/app/applet/backend/SpeedAlert.Application/SpeedAlert.Application.csproj": {
-              "projectPath": "/app/applet/backend/SpeedAlert.Application/SpeedAlert.Application.csproj"
+            "C:\\Users\\LENOVO\\Desktop\\RoadGuard\\backend\\SpeedAlert.Application\\SpeedAlert.Application.csproj": {
+              "projectPath": "C:\\Users\\LENOVO\\Desktop\\RoadGuard\\backend\\SpeedAlert.Application\\SpeedAlert.Application.csproj"
             },
-            "/app/applet/backend/SpeedAlert.Domain/SpeedAlert.Domain.csproj": {
-              "projectPath": "/app/applet/backend/SpeedAlert.Domain/SpeedAlert.Domain.csproj"
+            "C:\\Users\\LENOVO\\Desktop\\RoadGuard\\backend\\SpeedAlert.Domain\\SpeedAlert.Domain.csproj": {
+              "projectPath": "C:\\Users\\LENOVO\\Desktop\\RoadGuard\\backend\\SpeedAlert.Domain\\SpeedAlert.Domain.csproj"
             }
           }
         }
@@ -8226,7 +8234,13 @@
         "warnAsError": [
           "NU1605"
         ]
-      }
+      },
+      "restoreAuditProperties": {
+        "enableAudit": "true",
+        "auditLevel": "low",
+        "auditMode": "direct"
+      },
+      "SdkAnalysisLevel": "10.0.200"
     },
     "frameworks": {
       "net8.0": {
@@ -8271,7 +8285,7 @@
             "privateAssets": "all"
           }
         },
-        "runtimeIdentifierGraphPath": "/usr/lib/dotnet/sdk/8.0.126/PortableRuntimeIdentifierGraph.json"
+        "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\10.0.201/PortableRuntimeIdentifierGraph.json"
       }
     }
   }
