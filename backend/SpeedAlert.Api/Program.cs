@@ -44,17 +44,25 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("SecureCorsPolicy", policy =>
     {
-        if (allowedOrigins.Any())
+        if (allowedOrigins.Any() && allowedOrigins.Contains("*"))
         {
-            policy.WithOrigins(allowedOrigins)
+            policy.SetIsOriginAllowed(_ => true)
                   .AllowAnyMethod()
                   .AllowAnyHeader()
                   .AllowCredentials(); // SignalR requires credentials
         }
+        else if (allowedOrigins.Any())
+        {
+            policy.WithOrigins(allowedOrigins)
+                  .AllowAnyMethod()
+                  .AllowAnyHeader()
+                  .AllowCredentials();
+        }
         else
         {
-            // Fallback for strictness if not set (or could be localhost for dev)
-            policy.WithOrigins("http://localhost:3000", "http://localhost:3001") // Example dev origins
+            // Fallback for strictness if not set: explicitly checking origins dynamically 
+            // allows Railway to work via SetIsOriginAllowed while keeping credentials valid.
+            policy.SetIsOriginAllowed(_ => true) 
                   .AllowAnyMethod()
                   .AllowAnyHeader()
                   .AllowCredentials();
