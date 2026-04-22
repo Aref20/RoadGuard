@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import * as signalR from '@microsoft/signalr';
 import {
+  API_BASE_URL,
   API_ORIGIN,
   AdminSession,
   AdminUser,
@@ -16,10 +17,14 @@ import {
 } from '@/lib/api';
 
 export type AdminView = 'dashboard' | 'settings' | 'users';
+export type TelemetryMode = 'connecting' | 'realtime' | 'polling' | 'offline';
 export type Notice = {
   kind: 'success' | 'error' | 'info';
   message: string;
 } | null;
+
+const TELEMETRY_POLL_INTERVAL_MS = 15000;
+const TELEMETRY_RETRY_INTERVAL_MS = 45000;
 
 function normalizeHealth(payload: any): SystemHealth {
   return {
@@ -41,9 +46,21 @@ function isAuthError(error: unknown) {
     (error.status === 401 || (error.status === 403 && ['AUTH_FORBIDDEN', 'AUTH_ACCOUNT_DISABLED'].includes(error.code || '')));
 }
 
+function getHubUrls() {
+  return [...new Set([
+    `${API_ORIGIN}/hub/telemetry`,
+    `${API_BASE_URL}/hub/telemetry`,
+  ])];
+}
+
 export function useAdminDashboard(t: (key: string) => string) {
   const router = useRouter();
   const connectionRef = useRef<signalR.HubConnection | null>(null);
+  const pollingTimerRef = useRef<number | null>(null);
+  const retryTimerRef = useRef<number | null>(null);
+  const backendConnectedRef = useRef<boolean | null>(null);
+  const telemetryModeRef = useRef<TelemetryMode>('connecting');
+  const isStartingConnectionRef = useRef(false);
   const [currentView, setCurrentViewState] = useState<AdminView>('dashboard');
   const [health, setHealth] = useState<SystemHealth | null>(null);
   const [users, setUsers] = useState<AdminUser[]>([]);
@@ -53,6 +70,7 @@ export function useAdminDashboard(t: (key: string) => string) {
   const [loadingProviders, setLoadingProviders] = useState(false);
   const [savingProviders, setSavingProviders] = useState(false);
   const [isBackendConnected, setIsBackendConnected] = useState<boolean | null>(null);
+  const [telemetryMode, setTelemetryMode] = useState<TelemetryMode>('connecting');
   const [notice, setNotice] = useState<Notice>(null);
 
   const refreshProviders = async () => {
@@ -83,13 +101,37 @@ export function useAdminDashboard(t: (key: string) => string) {
 
     let isActive = true;
 
-    const bootstrap = async () => {
+    const updateBackendConnection = (value: boolean | null) => {
+      backendConnectedRef.current = value;
+      setIsBackendConnected(value);
+    };
+
+    const updateTelemetryMode = (value: TelemetryMode) => {
+      telemetryModeRef.current = value;
+      setTelemetryMode(value);
+    };
+
+    const stopPolling = () => {
+      if (pollingTimerRef.current !== null) {
+        window.clearInterval(pollingTimerRef.current);
+        pollingTimerRef.current = null;
+      }
+    };
+
+    const stopRetryLoop = () => {
+      if (retryTimerRef.current !== null) {
+        window.clearInterval(retryTimerRef.current);
+        retryTimerRef.current = null;
+      }
+    };
+
+    const loadSnapshot = async (includeProviders = false, silent = false) => {
       try {
         const [healthData, usersData, sessionsData, providersData] = await Promise.all([
           api.getHealth(),
           api.getUsers(),
           api.getSessions(),
-          api.getProviderSettings(),
+          includeProviders ? api.getProviderSettings() : Promise.resolve(null),
         ]);
 
         if (!isActive) {
@@ -99,8 +141,15 @@ export function useAdminDashboard(t: (key: string) => string) {
         setHealth(normalizeHealth(healthData));
         setUsers(usersData);
         setSessions(sessionsData);
-        setProviders(providersData.sort((left, right) => left.priorityOrder - right.priorityOrder));
-        setIsBackendConnected(true);
+        if (providersData) {
+          setProviders(providersData.sort((left, right) => left.priorityOrder - right.priorityOrder));
+        }
+
+        updateBackendConnection(true);
+
+        if (pollingTimerRef.current !== null && telemetryModeRef.current !== 'realtime') {
+          updateTelemetryMode('polling');
+        }
       } catch (error) {
         if (!isActive) {
           return;
@@ -112,52 +161,172 @@ export function useAdminDashboard(t: (key: string) => string) {
           return;
         }
 
-        setIsBackendConnected(false);
-        setNotice({ kind: 'error', message: error instanceof Error ? error.message : t('Failed to fetch dashboard data.') });
-      } finally {
-        if (isActive) {
-          setLoading(false);
+        updateBackendConnection(false);
+
+        if (telemetryModeRef.current !== 'realtime') {
+          updateTelemetryMode('offline');
+        }
+
+        if (!silent) {
+          setNotice({ kind: 'error', message: error instanceof Error ? error.message : t('Failed to fetch dashboard data.') });
         }
       }
     };
 
-    const connection = new signalR.HubConnectionBuilder()
-      .withUrl(`${API_ORIGIN}/hub/telemetry`, {
-        accessTokenFactory: () => token,
-        withCredentials: false,
-      })
-      .withAutomaticReconnect([0, 2000, 5000, 10000, 30000])
-      .build();
+    const scheduleRetryLoop = () => {
+      if (retryTimerRef.current !== null) {
+        return;
+      }
 
-    connectionRef.current = connection;
+      retryTimerRef.current = window.setInterval(() => {
+        void startRealtimeConnection();
+      }, TELEMETRY_RETRY_INTERVAL_MS);
+    };
 
-    connection.on('ReceiveHealth', (payload) => {
-      setHealth(normalizeHealth(payload));
-      setIsBackendConnected(true);
+    const startPolling = () => {
+      if (pollingTimerRef.current !== null) {
+        return;
+      }
+
+      void loadSnapshot(false, true);
+      pollingTimerRef.current = window.setInterval(() => {
+        void loadSnapshot(false, true);
+      }, TELEMETRY_POLL_INTERVAL_MS);
+    };
+
+    const enterFallbackMode = (error?: unknown) => {
+      if (!isActive) {
+        return;
+      }
+
+      if (isAuthError(error)) {
+        removeAuthToken();
+        router.push('/login');
+        return;
+      }
+
+      updateTelemetryMode(backendConnectedRef.current ? 'polling' : 'offline');
+      startPolling();
+      scheduleRetryLoop();
+    };
+
+    const buildConnection = (hubUrl: string) => {
+      const connection = new signalR.HubConnectionBuilder()
+        .withUrl(hubUrl, {
+          accessTokenFactory: () => token,
+          withCredentials: false,
+        })
+        .withAutomaticReconnect([0, 2000, 5000, 10000, 30000])
+        .build();
+
+      connection.on('ReceiveHealth', (payload) => {
+        setHealth(normalizeHealth(payload));
+        updateBackendConnection(true);
+      });
+
+      connection.on('ReceiveUsers', (payload) => {
+        setUsers(payload);
+      });
+
+      connection.on('ReceiveSessions', (payload) => {
+        setSessions(payload);
+      });
+
+      connection.onreconnecting(() => {
+        if (!isActive) {
+          return;
+        }
+
+        updateTelemetryMode(backendConnectedRef.current ? 'polling' : 'offline');
+        startPolling();
+      });
+
+      connection.onreconnected(() => {
+        if (!isActive) {
+          return;
+        }
+
+        updateBackendConnection(true);
+        updateTelemetryMode('realtime');
+        stopPolling();
+        stopRetryLoop();
+      });
+
+      connection.onclose((error) => {
+        if (!isActive || connectionRef.current !== connection) {
+          return;
+        }
+
+        enterFallbackMode(error);
+      });
+
+      return connection;
+    };
+
+    const startRealtimeConnection = async () => {
+      if (!isActive || isStartingConnectionRef.current) {
+        return;
+      }
+
+      const currentState = connectionRef.current?.state;
+      if (currentState === signalR.HubConnectionState.Connected ||
+        currentState === signalR.HubConnectionState.Connecting ||
+        currentState === signalR.HubConnectionState.Reconnecting) {
+        return;
+      }
+
+      isStartingConnectionRef.current = true;
+
+      try {
+        let lastError: unknown = null;
+
+        for (const hubUrl of getHubUrls()) {
+          if (!isActive) {
+            return;
+          }
+
+          const connection = buildConnection(hubUrl);
+          connectionRef.current = connection;
+
+          try {
+            await connection.start();
+
+            if (!isActive) {
+              await connection.stop().catch(() => undefined);
+              return;
+            }
+
+            updateBackendConnection(true);
+            updateTelemetryMode('realtime');
+            stopPolling();
+            stopRetryLoop();
+            return;
+          } catch (error) {
+            lastError = error;
+            connectionRef.current = null;
+            await connection.stop().catch(() => undefined);
+          }
+        }
+
+        enterFallbackMode(lastError);
+      } finally {
+        isStartingConnectionRef.current = false;
+      }
+    };
+
+    void loadSnapshot(true).finally(() => {
+      if (isActive) {
+        setLoading(false);
+      }
     });
-
-    connection.on('ReceiveUsers', (payload) => {
-      setUsers(payload);
-    });
-
-    connection.on('ReceiveSessions', (payload) => {
-      setSessions(payload);
-    });
-
-    connection.onclose(() => setIsBackendConnected(false));
-    connection.onreconnecting(() => setIsBackendConnected(false));
-    connection.onreconnected(() => setIsBackendConnected(true));
-
-    bootstrap();
-
-    connection.start().catch((error) => {
-      setIsBackendConnected(false);
-      setNotice({ kind: 'error', message: error instanceof Error ? error.message : t('SignalR connection failed.') });
-    });
+    void startRealtimeConnection();
 
     return () => {
       isActive = false;
-      connection.stop().catch(() => undefined);
+      stopPolling();
+      stopRetryLoop();
+      connectionRef.current?.stop().catch(() => undefined);
+      connectionRef.current = null;
     };
   }, [router, t]);
 
@@ -249,6 +418,7 @@ export function useAdminDashboard(t: (key: string) => string) {
     loadingProviders,
     savingProviders,
     isBackendConnected,
+    telemetryMode,
     notice,
     setNotice,
     toggleProvider,

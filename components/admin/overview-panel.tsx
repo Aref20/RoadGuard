@@ -2,6 +2,7 @@
 
 import { Activity, Bell, Database, Server, ShieldAlert, Users } from 'lucide-react';
 import { AdminSession, SystemHealth } from '@/lib/api';
+import { TelemetryMode } from './use-admin-dashboard';
 
 function MetricCard({
   title,
@@ -32,6 +33,7 @@ type OverviewPanelProps = {
   health: SystemHealth | null;
   sessions: AdminSession[];
   isBackendConnected: boolean | null;
+  telemetryMode: TelemetryMode;
   isRtl: boolean;
   language: 'ar' | 'en';
   t: (key: string) => string;
@@ -41,10 +43,17 @@ export function OverviewPanel({
   health,
   sessions,
   isBackendConnected,
+  telemetryMode,
   isRtl,
   language,
   t,
 }: OverviewPanelProps) {
+  const telemetryLabel = telemetryMode === 'realtime'
+    ? t('Live Socket')
+    : telemetryMode === 'polling'
+      ? t('Polling Mode')
+      : t('Offline');
+
   return (
     <>
       <div className="mb-8 flex items-center justify-between">
@@ -77,7 +86,7 @@ export function OverviewPanel({
         <MetricCard
           title={t('Registered Drivers')}
           value={(health?.totalUsers ?? 0).toLocaleString(language === 'ar' ? 'ar-EG' : 'en-US')}
-          subtitle={isBackendConnected ? t('Live Socket') : t('Offline')}
+          subtitle={isBackendConnected ? telemetryLabel : t('Offline')}
           icon={<Users size={22} className="text-blue-500" />}
         />
         <MetricCard

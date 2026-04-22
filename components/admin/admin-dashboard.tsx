@@ -81,6 +81,22 @@ export function AdminDashboard() {
     }
   };
 
+  const statusBadgeClassName = dashboard.telemetryMode === 'realtime'
+    ? 'bg-emerald-500/10 text-emerald-400'
+    : dashboard.telemetryMode === 'polling'
+      ? 'bg-amber-500/10 text-amber-300'
+      : dashboard.telemetryMode === 'offline'
+        ? 'bg-red-500/10 text-red-300'
+        : 'bg-slate-800 text-slate-300';
+
+  const statusBadgeLabel = dashboard.telemetryMode === 'realtime'
+    ? t('Live')
+    : dashboard.telemetryMode === 'polling'
+      ? t('Polling')
+      : dashboard.telemetryMode === 'offline'
+        ? t('Offline')
+        : t('Checking');
+
   return (
     <div className="flex h-screen overflow-hidden bg-slate-950" dir={isRtl ? 'rtl' : 'ltr'}>
       <Sidebar
@@ -99,10 +115,8 @@ export function AdminDashboard() {
             <h1 className="text-lg font-semibold text-slate-100">{t('Admin Control Center')}</h1>
             <p className="text-xs text-slate-500">{t('Secure telemetry, provider controls, and mobile user management.')}</p>
           </div>
-          <div className={`inline-flex items-center rounded-full px-3 py-1 text-xs ${
-            dashboard.isBackendConnected ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-300'
-          }`}>
-            {dashboard.isBackendConnected ? t('Connected') : t('Disconnected')}
+          <div className={`inline-flex items-center rounded-full px-3 py-1 text-xs ${statusBadgeClassName}`}>
+            {statusBadgeLabel}
           </div>
         </header>
 
@@ -132,9 +146,21 @@ export function AdminDashboard() {
             <div className="mb-6 flex items-start rounded-lg border border-red-500/20 bg-red-500/10 p-4 text-red-200">
               <AlertTriangle className={isRtl ? 'ml-3' : 'mr-3'} size={18} />
               <div className="text-sm">
-                <div className="font-medium">{t('WebSocket Disconnected / Backend API Offline')}</div>
+                <div className="font-medium">{t('Backend API Offline')}</div>
                 <div className="mt-1 text-red-200/80">
-                  {t('The admin UI is running, but the backend telemetry stream is unavailable right now.')}
+                  {t('The dashboard will keep retrying the API and telemetry stream in the background.')}
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          {dashboard.isBackendConnected && dashboard.telemetryMode === 'polling' ? (
+            <div className="mb-6 flex items-start rounded-lg border border-amber-500/20 bg-amber-500/10 p-4 text-amber-100">
+              <AlertTriangle className={isRtl ? 'ml-3' : 'mr-3'} size={18} />
+              <div className="text-sm">
+                <div className="font-medium">{t('Live Telemetry Unavailable')}</div>
+                <div className="mt-1 text-amber-100/80">
+                  {t('The dashboard switched to polling mode while the SignalR endpoint is unavailable.')}
                 </div>
               </div>
             </div>
@@ -151,6 +177,7 @@ export function AdminDashboard() {
               health={dashboard.health}
               sessions={dashboard.sessions}
               isBackendConnected={dashboard.isBackendConnected}
+              telemetryMode={dashboard.telemetryMode}
               isRtl={isRtl}
               language={language}
               t={t}
